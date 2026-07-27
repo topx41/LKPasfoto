@@ -1,0 +1,52 @@
+{
+  "name": "Foto Studio Manager",
+  "short_name": "StudioManager",
+  "description": "Aplikasi Foto Studio Auto Increment & Rekap Customer Excel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/api/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "excel_file",
+          "accept": [
+            ".xlsx",
+            ".xls",
+            ".csv",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv"
+          ]
+        },
+        {
+          "name": "file",
+          "accept": [
+            ".xlsx",
+            ".xls",
+            ".csv",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv"
+          ]
+        }
+      ]
+    }
+  }
+}
