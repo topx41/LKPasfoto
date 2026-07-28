@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install Node.js
+      # Setup Node.js
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -29,12 +29,19 @@ jobs:
       - name: Build Web
         run: npm run build
 
-      # Setup Java
+      # Setup Java 21
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
+
+      # Verify Java
+      - name: Verify Java
+        run: |
+          java -version
+          javac -version
+          echo "JAVA_HOME=$JAVA_HOME"
 
       # Setup Android SDK
       - name: Setup Android SDK
@@ -42,18 +49,30 @@ jobs:
 
       # Sync Capacitor
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: npx cap sync
 
       # Build APK
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
+
+      # Show generated files
+      - name: Show Build Outputs
+        run: |
+          echo "===== APK ====="
+          find android/app/build/outputs/apk -type f || true
+
+          echo "===== AAB ====="
+          find android/app/build/outputs/bundle -type f || true
 
       # Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Android-APK
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: |
+            android/app/build/outputs/**/*.apk
+            android/app/build/outputs/**/*.aab
+          if-no-files-found: error
