@@ -1,6 +1,6 @@
 {
-  "name": "Foto Studio Manager",
-  "description": "Aplikasi foto studio untuk manajemen multi-sesi foto, pencatatan customer, auto increment file foto dengan prefix dinamis, import data Excel, dan export rekap Excel.",
+  "name": "Liankhay Capture Manager",
+  "description": "Liankhay Capture Manager - Aplikasi Rekap Foto Studio untuk Pencatatan Customer, No. Absen, Auto Increment File Kamera, Tandai Foto & Keterangan, serta Export Rekap Excel.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

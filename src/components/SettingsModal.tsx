@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, X, Save, FileCode, SlidersHorizontal, Eye } from 'lucide-react';
+import { Settings, X, Save, Eye, RotateCcw, AlertTriangle } from 'lucide-react';
 import { StudioSettings } from '../types';
 import { generateFileName } from '../utils/filenameUtils';
 
@@ -9,6 +9,7 @@ interface SettingsModalProps {
   settings: StudioSettings;
   onSaveSettings: (newSettings: StudioSettings) => void;
   sampleCustomerName: string;
+  onResetAllData?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -17,8 +18,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onSaveSettings,
   sampleCustomerName,
+  onResetAllData,
 }) => {
   const [formData, setFormData] = useState<StudioSettings>({ ...settings });
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
 
   if (!isOpen) return null;
 
@@ -58,7 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="p-3.5 bg-sky-950/40 border border-sky-500/30 rounded-xl space-y-1">
             <div className="text-[11px] font-semibold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5" />
-              Preview Format File
+              Preview Format File Kamera
             </div>
             <p className="text-sm font-mono font-bold text-slate-100 break-all">{previewName}</p>
           </div>
@@ -66,18 +69,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Dynamic Prefix */}
           <div className="space-y-1.5">
             <label className="block text-slate-300 font-semibold">
-              Prefix Nama File Dinamis
+              Prefix Nama File Dinamis (Kamera)
             </label>
             <input
               type="text"
               required
               value={formData.prefix}
               onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
-              placeholder="Contoh: STUDIO_, PAS_, WEDDING_"
+              placeholder="Contoh: DSC, IMG_, PAS_"
               className="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 text-slate-100 font-mono rounded-xl focus:outline-none focus:border-sky-500"
             />
             <p className="text-[11px] text-slate-400">
-              Awalan file yang akan otomatis disertakan sebelum atau sesudah nomor file.
+              Awalan file yang disesuaikan dari kamera untuk kemudahan pencocokan/sinkronisasi.
             </p>
           </div>
 
@@ -85,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="block text-slate-300 font-semibold">
-                Nomor Saat Ini
+                Nomor File Kamera Saat Ini
               </label>
               <input
                 type="number"
@@ -121,24 +124,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* File Name Format Pattern */}
           <div className="space-y-1.5">
             <label className="block text-slate-300 font-semibold">
-              Format Kombinasi Nama File
+              Format Kombinasi Nama File Kamera
             </label>
             <div className="space-y-2">
               {[
                 {
-                  id: 'PREFIX_NUM_NAME',
-                  label: '{PREFIX}{NOMOR}_{NAMA}.jpg',
-                  desc: 'STUDIO_001_Budi.jpg',
+                  id: 'PREFIX_NUM',
+                  label: '{PREFIX}{NOMOR}.jpg (Sesuai Kamera)',
+                  desc: 'DSC0001.jpg',
                 },
                 {
-                  id: 'PREFIX_NUM',
-                  label: '{PREFIX}{NOMOR}.jpg',
-                  desc: 'STUDIO_001.jpg',
+                  id: 'PREFIX_NUM_NAME',
+                  label: '{PREFIX}{NOMOR}_{NAMA}.jpg',
+                  desc: 'DSC0001_Budi.jpg',
                 },
                 {
                   id: 'NAME_PREFIX_NUM',
                   label: '{NAMA}_{PREFIX}{NOMOR}.jpg',
-                  desc: 'Budi_STUDIO_001.jpg',
+                  desc: 'Budi_DSC0001.jpg',
                 },
               ].map((pattern) => (
                 <label
@@ -170,6 +173,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {/* File Extension option */}
+          <div className="p-3 bg-slate-800/40 border border-slate-800 rounded-xl space-y-1">
+            <label className="flex items-center gap-2.5 cursor-pointer text-slate-200 font-medium">
+              <input
+                type="checkbox"
+                checked={formData.includeExtension !== false}
+                onChange={(e) => setFormData({ ...formData, includeExtension: e.target.checked })}
+                className="rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-sky-500"
+              />
+              <span>Sertakan ekstensi file (.jpg) pada nama file</span>
+            </label>
+            <p className="text-[11px] text-slate-400 pl-6">
+              Hapus centang jika ingin format murni tanpa ekstensi (contoh: <span className="font-mono text-sky-300">DSCR_004_Wagimin</span>).
+            </p>
+          </div>
+
           {/* Auto advance customer option */}
           <div className="p-3 bg-slate-800/40 border border-slate-800 rounded-xl">
             <label className="flex items-center gap-2.5 cursor-pointer text-slate-200 font-medium">
@@ -182,6 +201,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Otomatis pindah ke customer berikutnya setelah 1x capture</span>
             </label>
           </div>
+
+          {/* RESET DATA APLIKASI SECTION */}
+          {onResetAllData && (
+            <div className="pt-3 border-t border-slate-800 space-y-2">
+              <span className="font-bold text-rose-400 block text-xs">Zona Bahaya (Reset Data)</span>
+              <button
+                type="button"
+                onClick={() => setShowConfirmReset(true)}
+                className="w-full py-2.5 px-4 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Reset Semua Data Aplikasi</span>
+              </button>
+            </div>
+          )}
         </form>
 
         {/* Footer */}
@@ -196,13 +230,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="submit"
             form="settings-form"
-            className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+            className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
           >
             <Save className="w-4 h-4" />
             <span>Simpan Pengaturan</span>
           </button>
         </div>
       </div>
+
+      {/* CONFIRM RESET ALL DATA MODAL */}
+      {showConfirmReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-sm w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-100">Reset Seluruh Data Aplikasi?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Tindakan ini akan <strong>menghapus semua sesi foto, daftar customer, rekap foto</strong>, dan mengembalikan aplikasi ke kondisi awal.
+              </p>
+            </div>
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmReset(false)}
+                className="px-4 py-2 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onResetAllData) onResetAllData();
+                  setShowConfirmReset(false);
+                  onClose();
+                }}
+                className="px-5 py-2 bg-rose-500 text-white font-bold rounded-xl text-xs shadow"
+              >
+                Ya, Reset Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

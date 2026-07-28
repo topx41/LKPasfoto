@@ -23,15 +23,15 @@ export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedC
     return [];
   }
 
-  // Detect column header for Customer Name
+  // Detect column header for Customer Name & Absen/ID
   const sampleRow = jsonRows[0];
   const keys = Object.keys(sampleRow);
 
   let nameKey = keys.find((k) =>
-    /nama|customer|client|orang|peserta|name/i.test(k)
+    /nama|customer|client|orang|peserta|siswa|name/i.test(k)
   ) || keys[0];
 
-  let codeKey = keys.find((k) => /kode|code|id|no|nomor/i.test(k) && k !== nameKey);
+  let codeKey = keys.find((k) => /absen|id|kode|code|no|nomor|nis/i.test(k) && k !== nameKey);
   let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
   let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
 
@@ -40,9 +40,11 @@ export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedC
       const rawName = String(row[nameKey] || '').trim();
       if (!rawName) return null;
 
+      const codeVal = codeKey ? String(row[codeKey]).trim() : undefined;
+
       return {
         name: rawName,
-        code: codeKey ? String(row[codeKey]).trim() : undefined,
+        code: codeVal,
         category: categoryKey ? String(row[categoryKey]).trim() : undefined,
         notes: notesKey ? String(row[notesKey]).trim() : undefined,
       };
@@ -80,10 +82,11 @@ export function generateExcelWorkbook(
   // Sheet 1: Rekap Foto (List of photos taken)
   const photoData = photos.map((p, index) => ({
     'No': index + 1,
-    'Nama Customer': p.customerName,
-    'Nomor File Kamera': p.fileName,
-    'Prefix': p.prefix,
-    'Nomor Urut': p.fileNumber,
+    'Nama': p.customerName,
+    'Nomor Absen / No ID': p.absenceNumber || p.customerCode || '-',
+    'Nomor File': p.fileName,
+    'Tandai': p.isMarked ? '⭐ Ya' : 'Tidak',
+    'Keterangan': p.notes || '-',
     'Waktu Capture': new Date(p.timestamp).toLocaleString('id-ID', {
       year: 'numeric',
       month: 'short',
@@ -97,16 +100,27 @@ export function generateExcelWorkbook(
   const photoSheet = XLSX.utils.json_to_sheet(
     photoData.length > 0
       ? photoData
-      : [{'No': '-', 'Nama Customer': 'Belum ada data foto', 'Nomor File Kamera': '-', 'Prefix': '-', 'Nomor Urut': '-', 'Waktu Capture': '-'}]
+      : [
+          {
+            'No': '-',
+            'Nama': 'Belum ada data foto',
+            'Nomor Absen / No ID': '-',
+            'Nomor File': '-',
+            'Tandai': '-',
+            'Keterangan': '-',
+            'Waktu Capture': '-',
+          },
+        ]
   );
   
   // Set column widths
   photoSheet['!cols'] = [
     { wch: 6 },
     { wch: 25 },
+    { wch: 20 },
+    { wch: 25 },
+    { wch: 12 },
     { wch: 30 },
-    { wch: 12 },
-    { wch: 12 },
     { wch: 22 },
   ];
 
@@ -115,25 +129,34 @@ export function generateExcelWorkbook(
   // Sheet 2: Daftar Customer (Summary)
   const customerData = customers.map((c, index) => ({
     'No': index + 1,
-    'Kode/ID': c.code || '-',
     'Nama Customer': c.name,
+    'No ID / Absen': c.absenceNumber || c.code || '-',
     'Kategori': c.category || '-',
-    'Jumlah Foto Captured': c.photoCount,
+    'Jumlah Foto': c.photoCount,
     'Status': c.status === 'completed' ? 'Selesai' : c.status === 'in_progress' ? 'Sedang Difoto' : 'Belum Difoto',
   }));
 
   const customerSheet = XLSX.utils.json_to_sheet(
     customerData.length > 0
       ? customerData
-      : [{'No': '-', 'Kode/ID': '-', 'Nama Customer': 'Belum ada customer', 'Kategori': '-', 'Jumlah Foto Captured': 0, 'Status': '-'}]
+      : [
+          {
+            'No': '-',
+            'Nama Customer': 'Belum ada customer',
+            'No ID / Absen': '-',
+            'Kategori': '-',
+            'Jumlah Foto': 0,
+            'Status': '-',
+          },
+        ]
   );
 
   customerSheet['!cols'] = [
     { wch: 6 },
-    { wch: 15 },
     { wch: 25 },
     { wch: 18 },
-    { wch: 20 },
+    { wch: 18 },
+    { wch: 15 },
     { wch: 15 },
   ];
 

@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Plus,
   Layers,
+  Users,
 } from 'lucide-react';
 
 import { Customer, PhotoRecord, StudioSettings, StudioSession } from './types';
@@ -28,6 +29,9 @@ import {
   loadActiveSessionId,
   saveActiveSessionId,
   DEFAULT_SESSIONS,
+  DEFAULT_SETTINGS,
+  INITIAL_CUSTOMERS,
+  clearAllAppData,
 } from './utils/storageUtils';
 import { generateFileName, formatFileNumber } from './utils/filenameUtils';
 import { downloadOrShareExcel, parseCustomerExcel, ImportedCustomer } from './utils/excelUtils';
@@ -39,6 +43,7 @@ import { SearchCustomerModal } from './components/SearchCustomerModal';
 import { ImportExcelModal } from './components/ImportExcelModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionModal } from './components/SessionModal';
+import { ExportShareModal } from './components/ExportShareModal';
 
 export default function App() {
   const [sessions, setSessions] = useState<StudioSession[]>(loadSessions);
@@ -48,10 +53,12 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>(loadCustomers);
   const [photos, setPhotos] = useState<PhotoRecord[]>(loadPhotos);
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(loadActiveCustomerId);
+  const [activeMainTab, setActiveMainTab] = useState<'REKAP' | 'ANTRIAN'>('REKAP');
 
   // Modals state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isExportShareOpen, setIsExportShareOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -135,14 +142,37 @@ export default function App() {
       }
     };
 
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (e.clipboardData && e.clipboardData.files.length > 0) {
+        const file = e.clipboardData.files[0];
+        if (/\.(xlsx|xls|csv)$/i.test(file.name)) {
+          try {
+            const customers = await parseCustomerExcel(file);
+            if (customers.length > 0) {
+              setSharedImportData(customers);
+              setSharedImportFileName(file.name);
+              setIsImportOpen(true);
+              showToast(`📥 File Excel (${file.name}) ditempel dari clipboard & siap diimpor!`);
+            } else {
+              showToast('⚠️ File Excel tidak memiliki data nama customer.');
+            }
+          } catch (err) {
+            showToast('⚠️ Gagal membaca file Excel dari clipboard.');
+          }
+        }
+      }
+    };
+
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
+    window.addEventListener('paste', handlePaste);
 
     return () => {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
+      window.removeEventListener('paste', handlePaste);
     };
   }, [showToast]);
 
@@ -263,11 +293,14 @@ export default function App() {
       sessionId: activeSessionId,
       customerId: customerId,
       customerName: customerName,
+      customerCode: activeCustomer?.code || activeCustomer?.absenceNumber,
+      absenceNumber: activeCustomer?.absenceNumber || activeCustomer?.code,
       fileName: fileName,
       prefix: settings.prefix,
       fileNumber: settings.currentNumber,
       dataUrl: dataUrl,
       timestamp: new Date().toISOString(),
+      isMarked: false,
     };
 
     // 1. Add photo record
@@ -453,12 +486,13 @@ export default function App() {
   };
 
   // ADD CUSTOMER
-  const handleAddCustomer = (name: string, category?: string) => {
+  const handleAddCustomer = (name: string, absenceNumber?: string) => {
     const newCust: Customer = {
       id: `cust_${Date.now()}`,
       sessionId: activeSessionId,
       name: name,
-      category: category,
+      absenceNumber: absenceNumber,
+      code: absenceNumber,
       status: 'pending',
       photoCount: 0,
       createdAt: new Date().toISOString(),
@@ -479,12 +513,50 @@ export default function App() {
     showToast('Customer dihapus dari daftar.');
   };
 
+  // DELETE MULTIPLE CUSTOMERS
+  const handleDeleteMultipleCustomers = (ids: string[]) => {
+    setCustomers((prev) => prev.filter((c) => !ids.includes(c.id)));
+    if (activeCustomerId && ids.includes(activeCustomerId)) {
+      const remaining = sessionCustomers.filter((c) => !ids.includes(c.id));
+      setActiveCustomerId(remaining.length > 0 ? remaining[0].id : null);
+    }
+    showToast(`${ids.length} customer berhasil dihapus.`);
+  };
+
+  // DELETE ALL CUSTOMERS IN SESSION
+  const handleDeleteAllCustomers = () => {
+    const count = sessionCustomers.length;
+    setCustomers((prev) => prev.filter((c) => c.sessionId !== activeSessionId));
+    setActiveCustomerId(null);
+    showToast(`Semua (${count}) customer pada sesi ini berhasil dihapus.`);
+  };
+
+  // DELETE ALL PHOTOS IN SESSION
+  const handleDeleteAllSessionPhotos = () => {
+    const count = sessionPhotos.length;
+    setPhotos((prev) => prev.filter((p) => p.sessionId !== activeSessionId));
+    showToast(`Semua (${count}) rekap foto pada sesi ini telah dihapus.`);
+  };
+
+  // RESET ALL APP DATA
+  const handleResetAllData = () => {
+    clearAllAppData();
+    setSessions(DEFAULT_SESSIONS);
+    setActiveSessionId('session_default');
+    setSettings(DEFAULT_SETTINGS);
+    setCustomers(INITIAL_CUSTOMERS);
+    setPhotos([]);
+    setActiveCustomerId('cust_1');
+    showToast('⚡ Seluruh data aplikasi telah direset ke kondisi awal!');
+  };
+
   // IMPORT CUSTOMERS FROM EXCEL
   const handleImportCustomers = (importedList: ImportedCustomer[], replaceExisting: boolean) => {
     const newCustomerObjects: Customer[] = importedList.map((item, index) => ({
       id: `cust_imp_${Date.now()}_${index}`,
       sessionId: activeSessionId,
       name: item.name,
+      absenceNumber: item.code,
       code: item.code,
       category: item.category,
       notes: item.notes,
@@ -516,52 +588,44 @@ export default function App() {
     showToast('Foto dihapus dari rekap sesi.');
   };
 
-  // UPDATE PHOTO (Manual edit of file number or customer name by operator)
+  // UPDATE PHOTO (Manual edit of photo details)
   const handleUpdatePhoto = (
     photoId: string,
-    updates: { fileName?: string; fileNumber?: number; customerName?: string }
+    updates: {
+      fileName?: string;
+      fileNumber?: number;
+      customerName?: string;
+      customerCode?: string;
+      absenceNumber?: string;
+      isMarked?: boolean;
+      notes?: string;
+    }
   ) => {
     setPhotos((prev) =>
       prev.map((p) => {
         if (p.id === photoId) {
           return {
             ...p,
-            fileName: updates.fileName !== undefined ? updates.fileName : p.fileName,
-            fileNumber: updates.fileNumber !== undefined ? updates.fileNumber : p.fileNumber,
-            customerName: updates.customerName !== undefined ? updates.customerName : p.customerName,
+            ...updates,
           };
         }
         return p;
       })
     );
-    showToast('Nomor file kamera / Nama berhasil diperbarui!');
+    showToast('Data foto rekap berhasil diperbarui!');
   };
 
-  // EXPORT / SHARE REKAP EXCEL
-  const handleExportExcel = async () => {
-    setIsSharing(true);
-    try {
-      const result = await downloadOrShareExcel(sessionPhotos, sessionCustomers, activeSession.name);
-      if (result.method === 'share') {
-        showToast('Tautan rekap Excel berhasil dibagikan!');
-      } else {
-        showToast('File Rekap Excel berhasil diunduh!');
-      }
-    } catch (err) {
-      console.error('Export error:', err);
-      showToast('Gagal mengeksport file Excel.');
-    } finally {
-      setIsSharing(false);
-    }
+  // EXPORT / SHARE REKAP EXCEL (Implicit Intent Modal)
+  const handleExportExcel = () => {
+    setIsExportShareOpen(true);
   };
 
   // RESET CURRENT SESSION COUNTER
-  const handleResetSessionCounter = () => {
-    if (confirm(`Apakah Anda yakin ingin mereset counter nomor Sesi "${activeSession.name}" ke #1?`)) {
-      setSettings((prev) => ({ ...prev, currentNumber: 1 }));
-      updateActiveSessionSettings(settings.prefix, 1);
-      showToast('Counter nomor sesi di-reset ke #1.');
-    }
+  const handleResetSessionCounter = (startNum?: number | unknown) => {
+    const validNum = typeof startNum === 'number' && !isNaN(startNum) ? startNum : 1;
+    setSettings((prev) => ({ ...prev, currentNumber: validNum }));
+    updateActiveSessionSettings(settings.prefix, validNum);
+    showToast(`🔄 Counter nomor sesi di-reset ke #${validNum}.`);
   };
 
   return (
@@ -584,10 +648,10 @@ export default function App() {
             </div>
             <div>
               <h1 className="font-bold text-base sm:text-lg text-slate-100 leading-tight">
-                Foto Studio Manager
+                Liankhay Capture Manager
               </h1>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                Auto-increment • Multi Sesi • Excel Rekap
+                Rekap Foto Studio • No. Absen & File Kamera
               </p>
             </div>
           </div>
@@ -683,106 +747,152 @@ export default function App() {
       </section>
 
       {/* MAIN LAYOUT CONTAINER */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT COLUMN: CAPTURE CONTROL STAGE & REKAP GALLERY */}
-        <div className="lg:col-span-8 space-y-6 flex flex-col">
-          {/* CAPTURE CONTROL CARD */}
-          <CaptureControl
-            onCapture={handleCapture}
-            activeCustomer={activeCustomer}
-            settings={settings}
-            onNextCustomer={handleNextCustomer}
-            onOpenSearch={() => setIsSearchOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            totalCapturedToday={sessionPhotos.length}
-          />
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+        {/* CAPTURE CONTROL CARD */}
+        <CaptureControl
+          onCapture={handleCapture}
+          activeCustomer={activeCustomer}
+          settings={settings}
+          onNextCustomer={handleNextCustomer}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onResetCounter={handleResetSessionCounter}
+          totalCapturedToday={sessionPhotos.length}
+        />
 
-          {/* QUICK PREFIX & FILE NUMBER CONTROL BAR FOR ACTIVE SESSION */}
-          <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="space-y-1">
-                <span className="text-slate-400 block font-medium">Prefix Sesi Ini:</span>
-                <input
-                  type="text"
-                  value={settings.prefix}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSettings({ ...settings, prefix: val });
-                    updateActiveSessionSettings(val, settings.currentNumber);
-                  }}
-                  className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-sky-400 font-bold rounded-lg w-28 focus:outline-none focus:border-sky-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-slate-400 block font-medium">Nomor Urut:</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={settings.currentNumber}
-                  onChange={(e) => {
-                    const num = parseInt(e.target.value) || 1;
-                    setSettings({ ...settings, currentNumber: num });
-                    updateActiveSessionSettings(settings.prefix, num);
-                  }}
-                  className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-slate-100 font-bold rounded-lg w-20 focus:outline-none focus:border-sky-500"
-                />
-              </div>
+        {/* QUICK PREFIX & FILE NUMBER CONTROL BAR FOR ACTIVE SESSION */}
+        <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="space-y-1">
+              <span className="text-slate-400 block font-medium">Prefix Sesi Ini:</span>
+              <input
+                type="text"
+                value={settings.prefix}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSettings({ ...settings, prefix: val });
+                  updateActiveSessionSettings(val, settings.currentNumber);
+                }}
+                className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-sky-400 font-bold rounded-lg w-28 focus:outline-none focus:border-sky-500"
+              />
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsSessionModalOpen(true)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg flex items-center gap-1.5 font-medium transition-colors"
-              >
-                <FolderKanban className="w-3.5 h-3.5" />
-                <span>Ganti Sesi ({sessions.length})</span>
-              </button>
-
-              <button
-                onClick={handleResetSessionCounter}
-                className="px-3 py-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition-colors"
-                title="Reset counter nomor sesi ke #1"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset Counter</span>
-              </button>
+            <div className="space-y-1">
+              <span className="text-slate-400 block font-medium">Nomor Urut:</span>
+              <input
+                type="number"
+                min="1"
+                value={settings.currentNumber}
+                onChange={(e) => {
+                  const num = parseInt(e.target.value) || 1;
+                  setSettings({ ...settings, currentNumber: num });
+                  updateActiveSessionSettings(settings.prefix, num);
+                }}
+                className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-slate-100 font-bold rounded-lg w-20 focus:outline-none focus:border-sky-500"
+              />
             </div>
           </div>
 
-          {/* RECAP PHOTO GALLERY LIST */}
-          <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSessionModalOpen(true)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg flex items-center gap-1.5 font-medium transition-colors cursor-pointer"
+            >
+              <FolderKanban className="w-3.5 h-3.5" />
+              <span>Ganti Sesi ({sessions.length})</span>
+            </button>
+
+            <button
+              onClick={handleResetSessionCounter}
+              className="px-3 py-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+              title="Reset counter nomor sesi ke #1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Counter</span>
+            </button>
+          </div>
+        </div>
+
+        {/* UNIFIED TABBED WRAPPER: REKAP FOTO & ANTRIAN CUSTOMER */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
+          {/* TAB HEADER BAR */}
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2 p-1.5 bg-slate-950 border border-slate-800/90 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setActiveMainTab('REKAP')}
+                className={`px-4 sm:px-6 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+                  activeMainTab === 'REKAP'
+                    ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/25'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                <span>Rekap Foto</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold ${
+                  activeMainTab === 'REKAP' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-sky-400'
+                }`}>
+                  {sessionPhotos.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveMainTab('ANTRIAN')}
+                className={`px-4 sm:px-6 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+                  activeMainTab === 'ANTRIAN'
+                    ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/25'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Antrian Customer</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold ${
+                  activeMainTab === 'ANTRIAN' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-sky-400'
+                }`}>
+                  {sessionCustomers.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400 font-mono">
+              Sesi Aktif: <strong className="text-sky-300 font-bold">{activeSession.name}</strong>
+            </div>
+          </div>
+
+          {/* TAB CONTENT */}
+          {activeMainTab === 'REKAP' ? (
             <PhotoHistoryList
               photos={sessionPhotos}
               onDeletePhoto={handleDeletePhoto}
+              onDeleteAllPhotos={handleDeleteAllSessionPhotos}
               onUpdatePhoto={handleUpdatePhoto}
               onExportExcel={handleExportExcel}
               isSharing={isSharing}
             />
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: CUSTOMER QUEUE & SUMMARY */}
-        <div className="lg:col-span-4 h-full">
-          <CustomerQueue
-            customers={sessionCustomers}
-            activeCustomerId={activeCustomerId}
-            onSelectCustomer={handleSelectCustomer}
-            onNextCustomer={handleNextCustomer}
-            onOpenImportModal={() => setIsImportOpen(true)}
-            onOpenSearchModal={() => setIsSearchOpen(true)}
-            onAddCustomer={handleAddCustomer}
-            onDeleteCustomer={handleDeleteCustomer}
-          />
+          ) : (
+            <CustomerQueue
+              customers={sessionCustomers}
+              activeCustomerId={activeCustomerId}
+              onSelectCustomer={handleSelectCustomer}
+              onNextCustomer={handleNextCustomer}
+              onOpenImportModal={() => setIsImportOpen(true)}
+              onOpenSearchModal={() => setIsSearchOpen(true)}
+              onAddCustomer={handleAddCustomer}
+              onDeleteCustomer={handleDeleteCustomer}
+              onDeleteMultipleCustomers={handleDeleteMultipleCustomers}
+              onDeleteAllCustomers={handleDeleteAllCustomers}
+            />
+          )}
         </div>
       </main>
 
       {/* FOOTER */}
       <footer className="border-t border-slate-800/80 py-4 px-4 bg-slate-900/40 text-xs text-slate-500 text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© Foto Studio Manager — Multi Sesi & Auto Increment Foto Studio</p>
+          <p>© Liankhay Capture Manager — Multi Sesi & Auto Increment Foto Studio</p>
           <div className="flex items-center gap-4 text-slate-400">
-            <span>Support: Mobile (Android/iOS), Tablet, Laptop</span>
+            <span>Affix Software</span>
           </div>
         </div>
       </footer>
@@ -821,6 +931,9 @@ export default function App() {
         activeCustomerId={activeCustomerId}
         onSelectCustomer={handleSelectCustomer}
         onAddCustomer={handleAddCustomer}
+        onDeleteCustomer={handleDeleteCustomer}
+        onDeleteMultipleCustomers={handleDeleteMultipleCustomers}
+        onDeleteAllCustomers={handleDeleteAllCustomers}
       />
 
       <ImportExcelModal
@@ -844,7 +957,29 @@ export default function App() {
           updateActiveSessionSettings(newSettings.prefix, newSettings.currentNumber);
         }}
         sampleCustomerName={activeCustomer ? activeCustomer.name : 'Customer_Studio'}
+        onResetAllData={handleResetAllData}
       />
+
+      <ExportShareModal
+        isOpen={isExportShareOpen}
+        onClose={() => setIsExportShareOpen(false)}
+        photos={sessionPhotos}
+        customers={sessionCustomers}
+        activeSession={activeSession}
+      />
+
+      {/* Global File Drag Overlay (Share Intent Catching Zone) */}
+      {isDraggingFile && (
+        <div className="fixed inset-0 z-50 bg-emerald-950/80 backdrop-blur-md border-4 border-dashed border-emerald-400 flex flex-col items-center justify-center text-white p-6 animate-fade-in pointer-events-none">
+          <div className="p-4 bg-emerald-500/20 text-emerald-300 rounded-full mb-3 animate-bounce">
+            <FileSpreadsheet className="w-12 h-12" />
+          </div>
+          <h2 className="text-xl font-bold text-emerald-300 mb-1">TANGKAP FILE SHARE EXCEL</h2>
+          <p className="text-sm text-slate-200 text-center max-w-md">
+            Lepaskan file Excel (.xlsx / .xls) yang dibagikan dari WhatsApp, Email, atau Folder di sini untuk mengimpor data customer!
+          </p>
+        </div>
+      )}
     </div>
   );
 }

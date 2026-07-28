@@ -1,13 +1,40 @@
 import React, { useState } from 'react';
-import { Image, Download, Trash2, Eye, FileSpreadsheet, Share2, Search, X, Edit3, Check, Save } from 'lucide-react';
+import {
+  Image,
+  Download,
+  Trash2,
+  Eye,
+  FileSpreadsheet,
+  Share2,
+  Search,
+  X,
+  Edit3,
+  Save,
+  Star,
+  Plus,
+  Check,
+  List,
+  Grid,
+  AlertTriangle,
+  ChevronDown,
+} from 'lucide-react';
 import { PhotoRecord } from '../types';
 
 interface PhotoHistoryListProps {
   photos: PhotoRecord[];
   onDeletePhoto: (photoId: string) => void;
+  onDeleteAllPhotos?: () => void;
   onUpdatePhoto: (
     photoId: string,
-    updates: { fileName?: string; fileNumber?: number; customerName?: string }
+    updates: {
+      fileName?: string;
+      fileNumber?: number;
+      customerName?: string;
+      customerCode?: string;
+      absenceNumber?: string;
+      isMarked?: boolean;
+      notes?: string;
+    }
   ) => void;
   onExportExcel: () => void;
   isSharing: boolean;
@@ -16,51 +43,98 @@ interface PhotoHistoryListProps {
 export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
   photos,
   onDeletePhoto,
+  onDeleteAllPhotos,
   onUpdatePhoto,
   onExportExcel,
   isSharing,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterMarkedOnly, setFilterMarkedOnly] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoRecord | null>(null);
 
-  // Edit State
-  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
+  // Modal view for showing all records when > 10
+  const [showAllRecordsModal, setShowAllRecordsModal] = useState(false);
+
+  // POPUP EDIT MODAL State
+  const [editingPhoto, setEditingPhoto] = useState<PhotoRecord | null>(null);
   const [editFileName, setEditFileName] = useState<string>('');
   const [editCustomerName, setEditCustomerName] = useState<string>('');
-  const [editFileNumber, setEditFileNumber] = useState<number>(1);
+  const [editAbsenceNumber, setEditAbsenceNumber] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [editIsMarked, setEditIsMarked] = useState<boolean>(false);
 
-  const filteredPhotos = photos.filter(
-    (p) =>
-      p.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.prefix.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Confirm Delete All Photos Modal
+  const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
 
-  const handleStartEdit = (photo: PhotoRecord) => {
-    setEditingPhotoId(photo.id);
-    setEditFileName(photo.fileName);
-    setEditCustomerName(photo.customerName);
-    setEditFileNumber(photo.fileNumber);
+  const filteredPhotos = photos.filter((p) => {
+    if (filterMarkedOnly && !p.isMarked) return false;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+
+    const absence = p.absenceNumber || p.customerCode || '';
+    const notes = p.notes || '';
+    return (
+      p.customerName.toLowerCase().includes(q) ||
+      p.fileName.toLowerCase().includes(q) ||
+      p.prefix.toLowerCase().includes(q) ||
+      absence.toLowerCase().includes(q) ||
+      notes.toLowerCase().includes(q)
+    );
+  });
+
+  const markedCount = photos.filter((p) => p.isMarked).length;
+
+  const handleToggleMark = (photo: PhotoRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    onUpdatePhoto(photo.id, { isMarked: !photo.isMarked });
+
+    if (selectedPhoto && selectedPhoto.id === photo.id) {
+      setSelectedPhoto({
+        ...selectedPhoto,
+        isMarked: !photo.isMarked,
+      });
+    }
   };
 
-  const handleSaveEdit = (photoId: string) => {
-    if (!editFileName.trim()) return;
-    onUpdatePhoto(photoId, {
-      fileName: editFileName.trim(),
-      customerName: editCustomerName.trim() || 'General Customer',
-      fileNumber: Number(editFileNumber) || 1,
-    });
-    setEditingPhotoId(null);
+  // Open Edit Popup Modal
+  const handleOpenEditPopup = (photo: PhotoRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingPhoto(photo);
+    setEditFileName(photo.fileName);
+    setEditCustomerName(photo.customerName);
+    setEditAbsenceNumber(photo.absenceNumber || photo.customerCode || '');
+    setEditNotes(photo.notes || '');
+    setEditIsMarked(Boolean(photo.isMarked));
+  };
 
-    // Update selectedPhoto if currently open in lightbox
-    if (selectedPhoto && selectedPhoto.id === photoId) {
+  // Save Edit Popup
+  const handleSaveEditPopup = () => {
+    if (!editingPhoto) return;
+    if (!editFileName.trim()) return;
+
+    const absence = editAbsenceNumber.trim();
+    onUpdatePhoto(editingPhoto.id, {
+      fileName: editFileName.trim(),
+      customerName: editCustomerName.trim() || 'Customer Studio',
+      absenceNumber: absence,
+      customerCode: absence,
+      notes: editNotes.trim(),
+      isMarked: editIsMarked,
+    });
+
+    if (selectedPhoto && selectedPhoto.id === editingPhoto.id) {
       setSelectedPhoto({
         ...selectedPhoto,
         fileName: editFileName.trim(),
-        customerName: editCustomerName.trim() || 'General Customer',
-        fileNumber: Number(editFileNumber) || 1,
+        customerName: editCustomerName.trim() || 'Customer Studio',
+        absenceNumber: absence,
+        customerCode: absence,
+        notes: editNotes.trim(),
+        isMarked: editIsMarked,
       });
     }
+
+    setEditingPhoto(null);
   };
 
   const handleDownloadSingle = (photo: PhotoRecord) => {
@@ -72,35 +146,168 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
     document.body.removeChild(a);
   };
 
+  // 10 records for front display
+  const frontDisplayPhotos = filteredPhotos.slice(0, 10);
+  const remainingCount = filteredPhotos.length - 10;
+
+  // Render photo rows helper function
+  const renderPhotoTableRows = (photoList: PhotoRecord[], isModal: boolean = false) => {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+              <th className="py-2.5 px-3 w-10 text-center">No</th>
+              <th className="py-2.5 px-3">Nama Customer</th>
+              <th className="py-2.5 px-3">No. Absen / ID</th>
+              <th className="py-2.5 px-3">File Kamera</th>
+              <th className="py-2.5 px-3 w-16 text-center">Tandai</th>
+              <th className="py-2.5 px-3">Keterangan</th>
+              <th className="py-2.5 px-3 text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/60">
+            {photoList.map((photo, idx) => {
+              const absence = photo.absenceNumber || photo.customerCode;
+              return (
+                <tr
+                  key={photo.id}
+                  className={`hover:bg-slate-800/50 transition-colors ${
+                    photo.isMarked ? 'bg-amber-500/5' : ''
+                  }`}
+                >
+                  {/* No */}
+                  <td className="py-2.5 px-3 text-center text-slate-500 font-mono font-medium">
+                    {idx + 1}
+                  </td>
+
+                  {/* Nama Customer */}
+                  <td className="py-2.5 px-3 font-bold text-slate-100">
+                    {photo.customerName}
+                  </td>
+
+                  {/* Absence Number */}
+                  <td className="py-2.5 px-3">
+                    {absence ? (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[11px] border border-amber-500/30">
+                        {absence}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic text-[11px]">-</span>
+                    )}
+                  </td>
+
+                  {/* File Kamera */}
+                  <td className="py-2.5 px-3">
+                    <button
+                      onClick={() => setSelectedPhoto(photo)}
+                      title="Klik untuk pratinjau foto"
+                      className="font-mono font-bold text-sky-400 hover:text-sky-300 hover:underline bg-slate-950 px-2 py-1 rounded border border-slate-800 text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3 text-slate-400" />
+                      <span>{photo.fileName}</span>
+                    </button>
+                  </td>
+
+                  {/* Tandai Button */}
+                  <td className="py-2.5 px-3 text-center">
+                    <button
+                      onClick={(e) => handleToggleMark(photo, e)}
+                      title={photo.isMarked ? 'Hapus Tanda ⭐' : 'Tandai Foto ⭐'}
+                      className={`p-1.5 rounded-full transition-all ${
+                        photo.isMarked
+                          ? 'bg-amber-500 text-slate-950 font-bold shadow-md scale-110'
+                          : 'bg-slate-800 text-slate-500 hover:text-amber-400'
+                      }`}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${photo.isMarked ? 'fill-slate-950' : ''}`} />
+                    </button>
+                  </td>
+
+                  {/* Keterangan */}
+                  <td className="py-2.5 px-3 text-slate-300 italic max-w-[160px] truncate">
+                    {photo.notes ? `💬 ${photo.notes}` : <span className="text-slate-600 font-sans not-italic">-</span>}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="py-2.5 px-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={(e) => handleOpenEditPopup(photo, e)}
+                        title="Edit Data Rekap (Popup Modal)"
+                        className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-slate-800 rounded-lg transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => onDeletePhoto(photo.id)}
+                        title="Hapus Record Foto"
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-lg">
       {/* Header Bar */}
       <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
-            <Image className="w-4 h-4" />
+            <List className="w-4 h-4" />
           </div>
           <div>
             <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-              <span>Hasil Rekap Foto</span>
+              <span>Rekap Foto LK Shooter</span>
               <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono text-xs">
                 {photos.length}
               </span>
+              {markedCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center gap-1">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>{markedCount} Ditandai</span>
+                </span>
+              )}
             </h3>
-            <p className="text-[11px] text-slate-400">Daftar file foto studio yang telah di-capture</p>
+            <p className="text-[11px] text-slate-400">Pencatatan Nama, No. Absen, File Kamera, Tandai & Keterangan</p>
           </div>
         </div>
 
-        {/* Search & Export Buttons */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-48">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+          {/* Filter Marked */}
+          <button
+            onClick={() => setFilterMarkedOnly(!filterMarkedOnly)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              filterMarkedOnly
+                ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-md'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+            }`}
+            title="Filter foto yang ditandai"
+          >
+            <Star className={`w-3.5 h-3.5 ${filterMarkedOnly ? 'fill-slate-950' : 'text-amber-400'}`} />
+            <span>⭐ Ditandai ({markedCount})</span>
+          </button>
+
+          {/* Search Box */}
+          <div className="relative flex-1 sm:w-44">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari file / customer..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-400 text-xs rounded-xl focus:outline-none focus:border-sky-500"
+              placeholder="Cari nama, absen, file..."
+              className="w-full pl-8 pr-7 py-1.5 bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-400 text-xs rounded-xl focus:outline-none focus:border-sky-500"
             />
             {searchQuery && (
               <button
@@ -112,203 +319,353 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
             )}
           </div>
 
+          {/* Export Excel Button */}
           <button
             onClick={onExportExcel}
             disabled={isSharing || photos.length === 0}
-            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow flex items-center gap-1.5 transition-all shrink-0"
+            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs shadow flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" />
             <Share2 className="w-3.5 h-3.5" />
             <span>Kirim Rekap Excel</span>
           </button>
+
+          {/* Hapus Semua Rekap Foto Sesi Ini Button */}
+          {onDeleteAllPhotos && photos.length > 0 && (
+            <button
+              onClick={() => setShowConfirmDeleteAll(true)}
+              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+              title="Hapus Semua Rekap Foto Sesi Ini"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden md:inline">Hapus Semua Rekap</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Photos Grid Container */}
+      {/* Main Front Display List (Up to 10 records) */}
       <div className="p-4 flex-1 overflow-y-auto">
         {filteredPhotos.length === 0 ? (
           <div className="py-12 text-center text-slate-500 space-y-2">
             <Image className="w-12 h-12 mx-auto opacity-20" />
-            <p className="text-xs font-medium">Belum ada foto yang diambil.</p>
+            <p className="text-xs font-medium">
+              {filterMarkedOnly
+                ? 'Belum ada foto yang ditandai (⭐).'
+                : searchQuery
+                ? `Tidak menemukan foto untuk "${searchQuery}"`
+                : 'Belum ada rekap foto pada sesi ini.'}
+            </p>
             <p className="text-[11px] text-slate-600">
-              Tekan tombol <strong className="text-sky-400">CAPTURE FOTO</strong> untuk mulai memfoto customer.
+              Tekan tombol <strong className="text-sky-400">CAPTURE / TAMBAH NOMOR</strong> untuk merekap foto.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {filteredPhotos.map((photo) => (
-              <div
-                key={photo.id}
-                className="group relative bg-slate-950 border border-slate-800 hover:border-sky-500/50 rounded-xl overflow-hidden transition-all shadow-md flex flex-col"
-              >
-                {/* Thumbnail Image */}
-                <div
-                  onClick={() => setSelectedPhoto(photo)}
-                  className="relative aspect-4/3 bg-slate-900 cursor-pointer overflow-hidden"
+          <div className="space-y-3">
+            {renderPhotoTableRows(frontDisplayPhotos)}
+
+            {/* Button Lihat Record Lainnya if > 10 */}
+            {remainingCount > 0 && (
+              <div className="pt-2 text-center">
+                <button
+                  onClick={() => setShowAllRecordsModal(true)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-xl text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
                 >
-                  <img
-                    src={photo.dataUrl}
-                    alt={photo.fileName}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                  />
-                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <span className="p-1.5 bg-slate-900/80 rounded-full text-slate-100">
-                      <Eye className="w-4 h-4" />
-                    </span>
-                  </div>
-                </div>
-
-                {/* Meta info */}
-                <div className="p-2.5 flex-1 flex flex-col justify-between text-xs space-y-2">
-                  {editingPhotoId === photo.id ? (
-                    /* Inline Editing Mode */
-                    <div className="space-y-1.5 p-1 bg-slate-900 rounded-lg border border-sky-500/50">
-                      <div>
-                        <label className="text-[9px] text-slate-400 font-medium block">Nomor File Kamera:</label>
-                        <input
-                          type="text"
-                          value={editFileName}
-                          onChange={(e) => setEditFileName(e.target.value)}
-                          className="w-full px-2 py-1 bg-slate-950 border border-slate-700 text-sky-400 font-mono font-bold text-xs rounded focus:outline-none focus:border-sky-500"
-                          placeholder="cth: DSC0012.JPG"
-                          autoFocus
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] text-slate-400 font-medium block">Nama Customer:</label>
-                        <input
-                          type="text"
-                          value={editCustomerName}
-                          onChange={(e) => setEditCustomerName(e.target.value)}
-                          className="w-full px-2 py-1 bg-slate-950 border border-slate-700 text-slate-100 font-bold text-xs rounded focus:outline-none focus:border-sky-500"
-                          placeholder="Nama Customer"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-1 pt-1">
-                        <button
-                          onClick={() => handleSaveEdit(photo.id)}
-                          className="flex-1 py-1 bg-sky-500 hover:bg-sky-400 text-white font-bold rounded text-[10px] flex items-center justify-center gap-1 shadow"
-                        >
-                          <Save className="w-3 h-3" />
-                          <span>Simpan</span>
-                        </button>
-                        <button
-                          onClick={() => setEditingPhotoId(null)}
-                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
-                        >
-                          Batal
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Normal Display Mode */
-                    <>
-                      <div>
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="font-bold text-slate-100 truncate text-[11px]" title={photo.customerName}>
-                            {photo.customerName}
-                          </p>
-                          <button
-                            onClick={() => handleStartEdit(photo)}
-                            title="Edit Nomor File Kamera / Nama"
-                            className="p-1 text-slate-400 hover:text-sky-400 hover:bg-slate-800 rounded transition-colors shrink-0"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        <div className="mt-1 p-1 bg-slate-900 border border-slate-800/80 rounded-lg">
-                          <span className="text-[9px] text-slate-500 block uppercase tracking-wider font-semibold">Nomor File Kamera:</span>
-                          <p className="text-[11px] text-sky-400 font-mono font-bold truncate" title={photo.fileName}>
-                            {photo.fileName}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                        <span>
-                          {new Date(photo.timestamp).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleDownloadSingle(photo)}
-                            title="Download Foto"
-                            className="p-1 text-slate-400 hover:text-sky-400 hover:bg-slate-800 rounded transition-colors"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => onDeletePhoto(photo.id)}
-                            title="Hapus Foto"
-                            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <span>Lihat Record Lainnya ({remainingCount} Foto)</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
 
-      {/* Lightbox Preview Modal */}
-      {selectedPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
-          <div className="relative max-w-3xl w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-            <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-3">
-                <div>
-                  <p className="font-bold text-slate-100 text-sm">{selectedPhoto.customerName}</p>
-                  <p className="text-sky-400 font-mono font-semibold">Nomor File: {selectedPhoto.fileName}</p>
+      {/* FULL RECORD MODAL (When clicking Lihat Record Lainnya) */}
+      {showAllRecordsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-5xl w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                  <List className="w-5 h-5" />
                 </div>
-                <button
-                  onClick={() => handleStartEdit(selectedPhoto)}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-lg flex items-center gap-1 font-medium transition-colors"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Edit Nomor File</span>
-                </button>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100">Daftar Lengkap Rekap Foto</h3>
+                  <p className="text-xs text-slate-400">Total {filteredPhotos.length} record foto tercatat</p>
+                </div>
               </div>
+
               <button
-                onClick={() => setSelectedPhoto(null)}
+                onClick={() => setShowAllRecordsModal(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[65vh] overflow-hidden">
+            <div className="p-4 flex-1 overflow-y-auto">
+              {renderPhotoTableRows(filteredPhotos, true)}
+            </div>
+
+            <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+              <span>Menampilkan {filteredPhotos.length} dari {photos.length} total foto</span>
+              <button
+                onClick={() => setShowAllRecordsModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PHOTO POPUP MODAL (Clean Non-Inline Modal) */}
+      {editingPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100">Edit Data Rekap Foto</h3>
+                  <p className="text-xs text-slate-400">Perbarui informasi customer & file kamera</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingPhoto(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form Fields */}
+            <div className="p-5 space-y-4 text-xs">
+              {/* Photo Thumbnail Banner */}
+              <div className="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                <img
+                  src={editingPhoto.dataUrl}
+                  alt={editingPhoto.fileName}
+                  className="w-14 h-14 object-cover rounded-lg border border-slate-800 shrink-0"
+                />
+                <div>
+                  <p className="font-bold text-slate-100 text-sm">{editingPhoto.customerName}</p>
+                  <p className="text-sky-400 font-mono font-bold">{editingPhoto.fileName}</p>
+                  <p className="text-[10px] text-slate-500">
+                    Waktu: {new Date(editingPhoto.timestamp).toLocaleString('id-ID')}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Nama Customer:
+                </label>
+                <input
+                  type="text"
+                  value={editCustomerName}
+                  onChange={(e) => setEditCustomerName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-slate-100 font-bold text-sm rounded-xl focus:outline-none focus:border-sky-500"
+                  placeholder="Nama Customer"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                    No. Absen / ID:
+                  </label>
+                  <input
+                    type="text"
+                    value={editAbsenceNumber}
+                    onChange={(e) => setEditAbsenceNumber(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-amber-300 font-mono font-bold text-sm rounded-xl focus:outline-none focus:border-sky-500"
+                    placeholder="cth: 12"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                    Nomor File Kamera:
+                  </label>
+                  <input
+                    type="text"
+                    value={editFileName}
+                    onChange={(e) => setEditFileName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-sky-400 font-mono font-bold text-sm rounded-xl focus:outline-none focus:border-sky-500"
+                    placeholder="cth: DSC0012.JPG"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Status Tandai Foto (⭐):
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setEditIsMarked(!editIsMarked)}
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    editIsMarked
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <Star className={`w-4 h-4 ${editIsMarked ? 'fill-slate-950' : ''}`} />
+                  <span>{editIsMarked ? '⭐ Foto Ditandai' : 'Biasa (Tidak Ditandai)'}</span>
+                </button>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Keterangan / Catatan:
+                </label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl focus:outline-none focus:border-sky-500"
+                  placeholder="Tambah catatan keterangan foto..."
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingPhoto(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditPopup}
+                className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Perubahan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal */}
+      {selectedPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-3xl w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-5 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-slate-100 text-base">{selectedPhoto.customerName}</p>
+                    {(selectedPhoto.absenceNumber || selectedPhoto.customerCode) && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-bold text-xs rounded">
+                        {selectedPhoto.absenceNumber || selectedPhoto.customerCode}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sky-400 font-mono font-semibold text-xs mt-0.5">
+                    Nomor File: {selectedPhoto.fileName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => handleToggleMark(selectedPhoto, e)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                    selectedPhoto.isMarked
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <Star className={`w-4 h-4 ${selectedPhoto.isMarked ? 'fill-slate-950' : ''}`} />
+                  <span>{selectedPhoto.isMarked ? 'Ditandai ⭐' : 'Tandai Foto'}</span>
+                </button>
+
+                <button
+                  onClick={(e) => handleOpenEditPopup(selectedPhoto, e)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-xl flex items-center gap-1.5 font-medium transition-colors"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Edit Data</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedPhoto(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[60vh] overflow-hidden">
               <img
                 src={selectedPhoto.dataUrl}
                 alt={selectedPhoto.fileName}
-                className="max-h-[60vh] w-auto object-contain rounded-lg shadow-lg"
+                className="max-h-[55vh] w-auto object-contain rounded-lg shadow-lg"
               />
             </div>
+
+            {selectedPhoto.notes && (
+              <div className="px-5 py-2.5 bg-slate-950/80 border-t border-slate-800 text-xs text-slate-300 flex items-center gap-2">
+                <span className="font-bold text-sky-400 shrink-0">💬 Keterangan:</span>
+                <span className="italic">{selectedPhoto.notes}</span>
+              </div>
+            )}
 
             <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
               <span className="text-slate-400 font-mono">
                 Waktu: {new Date(selectedPhoto.timestamp).toLocaleString('id-ID')}
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleDownloadSingle(selectedPhoto)}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white font-bold rounded-xl flex items-center gap-1.5 shadow transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Foto</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedPhoto(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl"
+              >
+                Tutup Pratinjau
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE ALL PHOTOS MODAL */}
+      {showConfirmDeleteAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-100">Hapus Semua Rekap Foto?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Apakah Anda yakin ingin menghapus <strong>semua {photos.length} rekap foto</strong> pada sesi ini? Tindakan ini tidak dapat dibatalkan.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => setShowConfirmDeleteAll(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (onDeleteAllPhotos) onDeleteAllPhotos();
+                  setShowConfirmDeleteAll(false);
+                }}
+                className="px-5 py-2 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Semua</span>
+              </button>
             </div>
           </div>
         </div>

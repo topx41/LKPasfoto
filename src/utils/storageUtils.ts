@@ -10,10 +10,10 @@ const STORAGE_KEYS = {
 };
 
 export const DEFAULT_SETTINGS: StudioSettings = {
-  prefix: 'STUDIO_',
+  prefix: 'DSC',
   currentNumber: 1,
-  numberDigitCount: 3,
-  fileNameFormat: 'PREFIX_NUM_NAME',
+  numberDigitCount: 4,
+  fileNameFormat: 'PREFIX_NUM',
   autoAdvanceOnCapture: false,
   saveQuality: 0.9,
 };
@@ -21,9 +21,9 @@ export const DEFAULT_SETTINGS: StudioSettings = {
 export const DEFAULT_SESSIONS: StudioSession[] = [
   {
     id: 'session_default',
-    name: 'Sesi Utama (Pagi)',
+    name: 'Sesi Utama Liankhay Capture',
     date: new Date().toISOString().split('T')[0],
-    prefix: 'STUDIO_',
+    prefix: 'DSC',
     currentNumber: 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -32,9 +32,9 @@ export const DEFAULT_SESSIONS: StudioSession[] = [
 ];
 
 export const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'cust_1', sessionId: 'session_default', name: 'Ahmad Fauzi', code: 'CST-001', category: 'Pas Foto 4x6', status: 'in_progress', photoCount: 0 },
-  { id: 'cust_2', sessionId: 'session_default', name: 'Siti Nurhaliza', code: 'CST-002', category: 'Wisuda', status: 'pending', photoCount: 0 },
-  { id: 'cust_3', sessionId: 'session_default', name: 'Budi Santoso', code: 'CST-003', category: 'Family Portrait', status: 'pending', photoCount: 0 },
+  { id: 'cust_1', sessionId: 'session_default', name: 'Ahmad Fauzi', code: '01', absenceNumber: '01', category: 'Pas Foto', status: 'in_progress', photoCount: 0 },
+  { id: 'cust_2', sessionId: 'session_default', name: 'Siti Nurhaliza', code: '02', absenceNumber: '02', category: 'Wisuda', status: 'pending', photoCount: 0 },
+  { id: 'cust_3', sessionId: 'session_default', name: 'Budi Santoso', code: '03', absenceNumber: '03', category: 'Siswa', status: 'pending', photoCount: 0 },
 ];
 
 export function loadSessions(): StudioSession[] {
@@ -147,5 +147,16 @@ export function saveActiveCustomerId(id: string | null): void {
     }
   } catch (err) {
     console.error('Failed to save active customer id:', err);
+  }
+}
+
+export function clearAllAppData(): void {
+  try {
+    Object.values(STORAGE_KEYS).forEach((key) => {
+      localStorage.removeItem(key);
+    });
+    localStorage.removeItem('foto_studio_pending_shared_import');
+  } catch (err) {
+    console.error('Failed to clear app data:', err);
   }
 }
