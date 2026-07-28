@@ -131,7 +131,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
     return processMappedExcelCustomers(rawSheetData.rawRows, mappingConfig);
   }, [rawSheetData, mappingConfig]);
 
-  const isRequirementMet = mappingConfig.nameColIndex >= 0 && mappingConfig.absenColIndex >= 0;
+  const isRequirementMet = mappingConfig.nameColIndex >= 0;
   const validCustomers = mappedResult ? mappedResult.validCustomers : [];
 
   const handleConfirmImport = () => {
@@ -302,7 +302,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                   </span>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* NOMOR ABSEN (MANDATORY) */}
+                    {/* NOMOR ABSEN (MANDATORY/AUTO) */}
                     <div>
                       <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
@@ -310,7 +310,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                           Kolom Nomor Absen:
                         </span>
                         <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black rounded text-[10px]">
-                          WAJIB
+                          WAJIB / AUTO
                         </span>
                       </label>
                       <select
@@ -318,13 +318,9 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                         onChange={(e) =>
                           setMappingConfig({ ...mappingConfig, absenColIndex: parseInt(e.target.value) })
                         }
-                        className={`w-full bg-slate-900 border rounded-lg px-3 py-1.5 font-medium text-slate-100 focus:outline-none ${
-                          mappingConfig.absenColIndex >= 0
-                            ? 'border-emerald-500/60 text-emerald-300'
-                            : 'border-rose-500 text-rose-300'
-                        }`}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 font-medium text-slate-100 focus:outline-none focus:border-sky-500"
                       >
-                        <option value={-1}>-- Pilih Kolom Nomor Absen --</option>
+                        <option value={-1}>✨ Auto-generate Nomor Absen (01, 02, 03...)</option>
                         {columnOptions.map((opt) => (
                           <option key={opt.index} value={opt.index}>
                             [Kolom {opt.colLetter}] {opt.label}
@@ -464,16 +460,27 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
                       {rawSheetData.rawRows.slice(Math.max(0, mappingConfig.startRow - 1), Math.max(0, mappingConfig.startRow - 1) + 40).map((row, idx) => {
-                        const rawAbsen = mappingConfig.absenColIndex >= 0 ? String(row[mappingConfig.absenColIndex] || '').trim() : '';
-                        const rawName = mappingConfig.nameColIndex >= 0 ? String(row[mappingConfig.nameColIndex] || '').trim() : '';
-                        const rawCat = mappingConfig.categoryColIndex >= 0 ? String(row[mappingConfig.categoryColIndex] || '').trim() : '';
-                        const isValid = rawAbsen.length > 0 && rawName.length > 0;
+                        const rawAbsenCell = mappingConfig.absenColIndex >= 0 && row[mappingConfig.absenColIndex] !== undefined
+                          ? String(row[mappingConfig.absenColIndex]).trim()
+                          : '';
+                        const rawName = mappingConfig.nameColIndex >= 0 && row[mappingConfig.nameColIndex] !== undefined
+                          ? String(row[mappingConfig.nameColIndex]).trim()
+                          : '';
+                        const rawCat = mappingConfig.categoryColIndex >= 0 && row[mappingConfig.categoryColIndex] !== undefined
+                          ? String(row[mappingConfig.categoryColIndex]).trim()
+                          : '';
+
+                        const displayAbsen = rawAbsenCell.length > 0
+                          ? rawAbsenCell
+                          : `${String(idx + 1).padStart(2, '0')} (Auto)`;
+
+                        const isValid = rawName.length > 0;
 
                         return (
                           <tr key={idx} className={isValid ? 'hover:bg-slate-800/40' : 'bg-rose-950/20 text-slate-500'}>
                             <td className="px-3 py-2 font-mono text-slate-500">{idx + 1}</td>
                             <td className="px-3 py-2 font-mono font-bold text-amber-300">
-                              {rawAbsen || <span className="text-rose-400 italic">Kosong</span>}
+                              {displayAbsen}
                             </td>
                             <td className="px-3 py-2 font-medium text-slate-100">
                               {rawName || <span className="text-rose-400 italic">Kosong</span>}
@@ -486,7 +493,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                                 </span>
                               ) : (
                                 <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold text-[10px]">
-                                  Inkomplit
+                                  Kosong
                                 </span>
                               )}
                             </td>

@@ -116,7 +116,7 @@ export function processMappedExcelCustomers(
   config: ColumnMappingConfig
 ): MappedCustomerResult {
   const startRowIdx = Math.max(0, config.startRow - 1);
-  const dataRows = rawRows.slice(startRowIdx);
+  const dataRows = Array.isArray(rawRows) ? rawRows.slice(startRowIdx) : [];
 
   const validCustomers: ImportedCustomer[] = [];
   let skippedCount = 0;
@@ -144,14 +144,19 @@ export function processMappedExcelCustomers(
         ? String(row[config.notesColIndex]).trim()
         : undefined;
 
-    if (rawName.length > 0 && rawAbsen.length > 0) {
+    if (rawName.length > 0) {
+      // If absen is empty or no column mapped, auto-generate sequential absen number
+      const finalAbsen = rawAbsen.length > 0
+        ? rawAbsen
+        : String(validCustomers.length + 1).padStart(2, '0');
+
       validCustomers.push({
         name: rawName,
-        code: rawAbsen,
+        code: finalAbsen,
         category: rawCategory,
         notes: rawNotes,
       });
-    } else if (rawName.length > 0 || rawAbsen.length > 0) {
+    } else if (rawAbsen.length > 0) {
       skippedCount++;
     }
   });

@@ -636,9 +636,36 @@ export default function App() {
     showToast('Data foto rekap berhasil diperbarui!');
   };
 
-  // EXPORT / SHARE REKAP EXCEL (Implicit Intent Modal)
-  const handleExportExcel = () => {
-    setIsExportShareOpen(true);
+  // EXPORT / SHARE REKAP EXCEL (Direct Device App Share with Fallback)
+  const handleExportExcel = async () => {
+    setIsSharing(true);
+    try {
+      const now = new Date();
+      const dateFormatted = now.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+      const res = await downloadOrShareExcel(
+        sessionPhotos,
+        sessionCustomers,
+        activeSession.name,
+        dateFormatted,
+        activeSession.prefix
+      );
+      if (res.method === 'share' && res.success) {
+        showToast('✅ Berhasil membagikan file Excel rekap!');
+      } else if (res.method === 'download') {
+        showToast('📥 File Excel rekap diunduh & siap dilampirkan.');
+        setIsExportShareOpen(true);
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      setIsExportShareOpen(true);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // RESET CURRENT SESSION COUNTER

@@ -19,31 +19,44 @@
     }
   ],
   "share_target": {
-    "action": "/",
+    "action": "/?share_target=true",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
       "files": [
-        {
-          "name": "excel_file",
-          "accept": [
-            ".xlsx",
-            ".xls",
-            ".csv",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-excel",
-            "text/csv"
-          ]
-        },
         {
           "name": "file",
           "accept": [
-            ".xlsx",
-            ".xls",
-            ".csv",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/vnd.ms-excel",
-            "text/csv"
+            "text/csv",
+            "application/csv",
+            "application/excel",
+            "application/vnd.msexcel",
+            "application/octet-stream",
+            "*/*",
+            ".xlsx",
+            ".xls",
+            ".csv"
+          ]
+        },
+        {
+          "name": "excel_file",
+          "accept": [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv",
+            "application/csv",
+            "application/excel",
+            "application/vnd.msexcel",
+            "application/octet-stream",
+            "*/*",
+            ".xlsx",
+            ".xls",
+            ".csv"
           ]
         }
       ]
