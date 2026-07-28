@@ -13,21 +13,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+      - uses: actions/setup-node@v4
         with:
-          flutter-version: "3.35.3"
+          node-version: 20
+          cache: npm
 
-      - run: flutter --version
+      - run: npm install
 
-      - run: flutter pub get
+      - run: npm run build
 
-      - run: flutter build apk --release
+      - run: npx cap sync android
 
-      - run: flutter build appbundle --release
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Android-Build
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: Android-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
