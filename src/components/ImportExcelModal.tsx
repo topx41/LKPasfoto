@@ -1,6 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, Upload, X, Check, AlertCircle, FileCheck2, Share2, Smartphone } from 'lucide-react';
-import { parseCustomerExcel, ImportedCustomer } from '../utils/excelUtils';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  FileSpreadsheet,
+  Upload,
+  X,
+  Check,
+  AlertCircle,
+  FileCheck2,
+  Share2,
+  Smartphone,
+  SlidersHorizontal,
+  Hash,
+  UserCheck,
+  Tag,
+  FileText,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  ImportedCustomer,
+  RawExcelSheetData,
+  ColumnMappingConfig,
+  extractRawExcelData,
+  autoDetectColumnMapping,
+  processMappedExcelCustomers,
+} from '../utils/excelUtils';
 
 interface ImportExcelModalProps {
   isOpen: boolean;
@@ -10,6 +32,16 @@ interface ImportExcelModalProps {
   initialFileName?: string;
 }
 
+function getColumnLetter(colIndex: number): string {
+  let temp = colIndex;
+  let letter = '';
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
 export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   isOpen,
   onClose,
@@ -17,7 +49,15 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   initialParsedData,
   initialFileName,
 }) => {
-  const [parsedData, setParsedData] = useState<ImportedCustomer[] | null>(initialParsedData || null);
+  const [rawSheetData, setRawSheetData] = useState<RawExcelSheetData | null>(null);
+  const [mappingConfig, setMappingConfig] = useState<ColumnMappingConfig>({
+    startRow: 2,
+    headerRow: 1,
+    nameColIndex: -1,
+    absenColIndex: -1,
+    categoryColIndex: -1,
+    notesColIndex: -1,
+  });
   const [fileName, setFileName] = useState<string>(initialFileName || '');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -25,8 +65,24 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   const [showWhatsAppGuide, setShowWhatsAppGuide] = useState<boolean>(false);
 
   useEffect(() => {
-    if (initialParsedData && initialParsedData.length > 0) {
-      setParsedData(initialParsedData);
+    if (initialParsedData && initialParsedData.length > 0 && !rawSheetData) {
+      // Synthesize rawSheetData from initialParsedData if opened from Share Target
+      const header = ['Nomor Absen', 'Nama Customer', 'Kategori / Kelas', 'Catatan'];
+      const rows = initialParsedData.map((c) => [c.code || '', c.name || '', c.category || '', c.notes || '']);
+      const synthesizedRows = [header, ...rows];
+      setRawSheetData({
+        sheetName: 'Imported_Excel',
+        rawRows: synthesizedRows,
+        maxCols: 4,
+      });
+      setMappingConfig({
+        startRow: 2,
+        headerRow: 1,
+        absenColIndex: 0,
+        nameColIndex: 1,
+        categoryColIndex: 2,
+        notesColIndex: 3,
+      });
       if (initialFileName) setFileName(initialFileName);
     }
   }, [initialParsedData, initialFileName]);
@@ -42,33 +98,54 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
     setFileName(file.name);
 
     try {
-      const result = await parseCustomerExcel(file);
-      if (result.length === 0) {
-        setErrorMsg('Tidak ditemukan data nama customer pada file Excel ini.');
-        setParsedData(null);
-      } else {
-        setParsedData(result);
-      }
+      const arrayBuffer = await file.arrayBuffer();
+      const sheetData = extractRawExcelData(arrayBuffer);
+      setRawSheetData(sheetData);
+      const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
+      setMappingConfig(autoConfig);
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal membaca file Excel. Pastikan format .xlsx atau .xls valid.');
-      setParsedData(null);
+      setRawSheetData(null);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const columnOptions = useMemo(() => {
+    if (!rawSheetData) return [];
+    const options = [];
+    const headerRowIdx = Math.max(0, mappingConfig.headerRow - 1);
+    const headerRow = rawSheetData.rawRows[headerRowIdx] || [];
+
+    for (let c = 0; c < rawSheetData.maxCols; c++) {
+      const colLetter = getColumnLetter(c);
+      const cellVal = headerRow[c] !== undefined ? String(headerRow[c]).trim() : '';
+      const label = cellVal ? cellVal : `[Kosong]`;
+      options.push({ index: c, colLetter, label });
+    }
+    return options;
+  }, [rawSheetData, mappingConfig.headerRow]);
+
+  const mappedResult = useMemo(() => {
+    if (!rawSheetData) return null;
+    return processMappedExcelCustomers(rawSheetData.rawRows, mappingConfig);
+  }, [rawSheetData, mappingConfig]);
+
+  const isRequirementMet = mappingConfig.nameColIndex >= 0 && mappingConfig.absenColIndex >= 0;
+  const validCustomers = mappedResult ? mappedResult.validCustomers : [];
+
   const handleConfirmImport = () => {
-    if (parsedData && parsedData.length > 0) {
-      onImportCustomers(parsedData, replaceExisting);
+    if (validCustomers.length > 0 && isRequirementMet) {
+      onImportCustomers(validCustomers, replaceExisting);
       onClose();
-      setParsedData(null);
+      setRawSheetData(null);
       setFileName('');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
           <div className="flex items-center gap-2.5">
@@ -77,71 +154,72 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-100">Import Data Customer Excel</h3>
-              <p className="text-xs text-slate-400">Muat daftar nama dari file .xlsx / .xls</p>
+              <p className="text-xs text-slate-400">Penyesuaian format kolom & requirement field</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-5 flex-1 overflow-y-auto space-y-4">
+        <div className="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
           {/* WhatsApp / Share Info Banner */}
           <div className="p-3 bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-500/30 rounded-xl text-xs space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-bold text-emerald-400 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                Menerima File dari WhatsApp / Aplikasi Lain
+                Menerima File dari WhatsApp / Share Target PWA
               </span>
               <button
                 onClick={() => setShowWhatsAppGuide(!showWhatsAppGuide)}
-                className="text-[11px] text-sky-400 hover:underline font-semibold"
+                className="text-[11px] text-sky-400 hover:underline font-semibold cursor-pointer"
               >
-                {showWhatsAppGuide ? 'Sembunyikan Petunjuk' : 'Lihat Cara Pakai'}
+                {showWhatsAppGuide ? 'Sembunyikan Petunjuk' : 'Lihat Petunjuk'}
               </button>
             </div>
             {showWhatsAppGuide && (
               <div className="pt-2 border-t border-emerald-500/20 text-slate-300 space-y-1.5 text-[11px] leading-relaxed">
                 <p>
-                  <strong className="text-emerald-300">1. Bagikan Langsung (Share Sheet):</strong> Di WhatsApp HP, tekan lama file Excel &rarr; klik ikon <Share2 className="w-3 h-3 inline" /> <strong>Bagikan</strong> &rarr; Pilih "Foto Studio Manager".
+                  <strong className="text-emerald-300">1. Share Target PWA:</strong> File Excel yang dikirim lewat tombol Bagikan WhatsApp / File Manager akan otomatis masuk ke menu pemetaan ini.
                 </p>
                 <p>
-                  <strong className="text-emerald-300">2. Drag & Drop:</strong> Jika membuka dari WhatsApp Web / Desktop, Anda bisa langsung <strong>menarik (drag) file Excel dan melepaskannya</strong> di layar mana saja dalam aplikasi ini.
-                </p>
-                <p>
-                  <strong className="text-emerald-300">3. Unduh & Pilih:</strong> Atau simpan file Excel dari WhatsApp ke HP/Laptop, lalu gunakan area unggah di bawah ini.
+                  <strong className="text-emerald-300">2. Requirement Field:</strong> Aplikasi mengharuskan adanya <span className="text-amber-300 font-bold">Nomor Absen</span> dan <span className="text-amber-300 font-bold">Nama Customer</span>.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Upload Area */}
-          <div className="relative border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-2xl p-6 text-center transition-all bg-slate-950/40 group">
+          {/* File Picker / Upload Box */}
+          <div className="relative border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-4 text-center transition-all bg-slate-950/40 group">
             <input
               type="file"
               accept=".xlsx, .xls, .csv"
               onChange={handleFileChange}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
             />
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
-              <Upload className="w-6 h-6" />
+            <div className="flex items-center justify-center gap-3">
+              <div className="p-2 bg-slate-800 rounded-lg text-emerald-400">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-slate-200">
+                  {fileName ? fileName : 'Klik atau Drag & Drop file Excel ke sini'}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Mendukung format .xlsx, .xls, .csv dari WhatsApp & File Manager
+                </p>
+              </div>
             </div>
-            <p className="text-sm font-semibold text-slate-200">
-              {fileName ? fileName : 'Klik atau Drag & Drop file Excel ke sini'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Kolom nama customer akan terdeteksi otomatis (Format .xlsx, .xls, .csv)
-            </p>
           </div>
 
           {isLoading && (
             <div className="py-6 text-center text-slate-400 text-sm animate-pulse flex justify-center items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 animate-spin text-emerald-400" />
-              Memproses file Excel...
+              Menganalisis kolom dan baris Excel...
             </div>
           )}
 
@@ -152,51 +230,272 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
             </div>
           )}
 
-          {/* Preview Table */}
-          {parsedData && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                  <FileCheck2 className="w-4 h-4" />
-                  Berhasil membaca {parsedData.length} customer
-                </span>
-                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={replaceExisting}
-                    onChange={(e) => setReplaceExisting(e.target.checked)}
-                    className="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <span>Ganti antrean saat ini</span>
-                </label>
+          {/* DYNAMIC COLUMN & ROW MAPPING SECTION */}
+          {rawSheetData && (
+            <div className="space-y-4 pt-1">
+              {/* CONFIGURATION CARD */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                  <span className="font-bold text-slate-200 flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-sky-400" />
+                    Penyesuaian Format & Requirement Field
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    Total: {rawSheetData.rawRows.length} baris di Sheet
+                  </span>
+                </div>
+
+                {/* START ROW SELECTOR */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1 text-[11px]">
+                      Baris Awal Data Record:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={mappingConfig.startRow}
+                        onChange={(e) =>
+                          setMappingConfig({ ...mappingConfig, startRow: parseInt(e.target.value) || 2 })
+                        }
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono font-bold focus:outline-none focus:border-sky-500"
+                      >
+                        {Array.from({ length: Math.min(20, rawSheetData.rawRows.length) }, (_, i) => i + 1).map(
+                          (r) => (
+                            <option key={r} value={r}>
+                              Baris ke-{r} {r === 1 ? '(Termasuk Header)' : r === 2 ? '(Default setelah Header)' : ''}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1 text-[11px]">
+                      Baris Judul Header (Kolom):
+                    </label>
+                    <select
+                      value={mappingConfig.headerRow}
+                      onChange={(e) => {
+                        const hRow = parseInt(e.target.value) || 1;
+                        setMappingConfig({
+                          ...mappingConfig,
+                          headerRow: hRow,
+                          startRow: Math.max(hRow + 1, mappingConfig.startRow),
+                        });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono focus:outline-none focus:border-sky-500"
+                    >
+                      {Array.from({ length: Math.min(10, rawSheetData.rawRows.length) }, (_, i) => i + 1).map((r) => (
+                        <option key={r} value={r}>
+                          Baris ke-{r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* MANDATORY FIELD SELECTORS (REQUIREMENT FIELDS) */}
+                <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl space-y-2.5">
+                  <span className="text-[11px] font-extrabold text-amber-300 uppercase tracking-wider block">
+                    REQUIREMENT FIELDS (WAJIB DIMALIKAN):
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* NOMOR ABSEN (MANDATORY) */}
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Hash className="w-3.5 h-3.5 text-amber-400" />
+                          Kolom Nomor Absen:
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black rounded text-[10px]">
+                          WAJIB
+                        </span>
+                      </label>
+                      <select
+                        value={mappingConfig.absenColIndex}
+                        onChange={(e) =>
+                          setMappingConfig({ ...mappingConfig, absenColIndex: parseInt(e.target.value) })
+                        }
+                        className={`w-full bg-slate-900 border rounded-lg px-3 py-1.5 font-medium text-slate-100 focus:outline-none ${
+                          mappingConfig.absenColIndex >= 0
+                            ? 'border-emerald-500/60 text-emerald-300'
+                            : 'border-rose-500 text-rose-300'
+                        }`}
+                      >
+                        <option value={-1}>-- Pilih Kolom Nomor Absen --</option>
+                        {columnOptions.map((opt) => (
+                          <option key={opt.index} value={opt.index}>
+                            [Kolom {opt.colLetter}] {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* NAMA CUSTOMER (MANDATORY) */}
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                          Kolom Nama Customer:
+                        </span>
+                        <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 font-black rounded text-[10px]">
+                          WAJIB
+                        </span>
+                      </label>
+                      <select
+                        value={mappingConfig.nameColIndex}
+                        onChange={(e) =>
+                          setMappingConfig({ ...mappingConfig, nameColIndex: parseInt(e.target.value) })
+                        }
+                        className={`w-full bg-slate-900 border rounded-lg px-3 py-1.5 font-medium text-slate-100 focus:outline-none ${
+                          mappingConfig.nameColIndex >= 0
+                            ? 'border-emerald-500/60 text-emerald-300'
+                            : 'border-rose-500 text-rose-300'
+                        }`}
+                      >
+                        <option value={-1}>-- Pilih Kolom Nama Customer --</option>
+                        {columnOptions.map((opt) => (
+                          <option key={opt.index} value={opt.index}>
+                            [Kolom {opt.colLetter}] {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* OPTIONAL FIELD SELECTORS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1.5 text-[11px]">
+                      <Tag className="w-3.5 h-3.5 text-slate-400" />
+                      Kode / Kelas / Group (Opsional):
+                    </label>
+                    <select
+                      value={mappingConfig.categoryColIndex}
+                      onChange={(e) =>
+                        setMappingConfig({ ...mappingConfig, categoryColIndex: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 focus:outline-none focus:border-sky-500"
+                    >
+                      <option value={-1}>- Tidak Dipakai -</option>
+                      {columnOptions.map((opt) => (
+                        <option key={opt.index} value={opt.index}>
+                          [Kolom {opt.colLetter}] {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1.5 text-[11px]">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      Catatan / No HP (Opsional):
+                    </label>
+                    <select
+                      value={mappingConfig.notesColIndex}
+                      onChange={(e) =>
+                        setMappingConfig({ ...mappingConfig, notesColIndex: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 focus:outline-none focus:border-sky-500"
+                    >
+                      <option value={-1}>- Tidak Dipakai -</option>
+                      {columnOptions.map((opt) => (
+                        <option key={opt.index} value={opt.index}>
+                          [Kolom {opt.colLetter}] {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="border border-slate-800 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-slate-950/60 text-xs">
-                <table className="w-full text-left text-slate-300">
-                  <thead className="bg-slate-800/80 text-slate-400 sticky top-0 font-medium">
-                    <tr>
-                      <th className="px-3 py-2 w-12">No</th>
-                      <th className="px-3 py-2">Nama</th>
-                      <th className="px-3 py-2">Kode</th>
-                      <th className="px-3 py-2">Kategori</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {parsedData.slice(0, 50).map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/40">
-                        <td className="px-3 py-2 text-slate-500 font-mono">{idx + 1}</td>
-                        <td className="px-3 py-2 font-medium text-slate-100">{item.name}</td>
-                        <td className="px-3 py-2 text-slate-400">{item.code || '-'}</td>
-                        <td className="px-3 py-2 text-slate-400">{item.category || '-'}</td>
+              {/* REQUIREMENT STATUS BANNER */}
+              {!isRequirementMet ? (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span className="font-semibold">
+                    SYARAT WAJIB: Silakan tentukan Kolom Nomor Absen dan Nama Customer di atas!
+                  </span>
+                </div>
+              ) : (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <FileCheck2 className="w-4 h-4 text-emerald-400" />
+                    {validCustomers.length} Customer Valid Siap Di-import
+                  </span>
+                  {mappedResult && mappedResult.skippedCount > 0 && (
+                    <span className="text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                      {mappedResult.skippedCount} baris inkomplit/dilewati
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* LIVE PREVIEW TABLE */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-slate-400 text-[11px]">
+                  <span className="font-bold text-slate-300">
+                    Pratinjau Hasil Pembacaan (Mulai Baris ke-{mappingConfig.startRow}):
+                  </span>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={replaceExisting}
+                      onChange={(e) => setReplaceExisting(e.target.checked)}
+                      className="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span>Ganti antrean saat ini</span>
+                  </label>
+                </div>
+
+                <div className="border border-slate-800 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-slate-950/80 text-[11px]">
+                  <table className="w-full text-left text-slate-300">
+                    <thead className="bg-slate-800 text-slate-300 sticky top-0 font-bold border-b border-slate-700">
+                      <tr>
+                        <th className="px-3 py-2 w-10">#</th>
+                        <th className="px-3 py-2">No Absen (Wajib)</th>
+                        <th className="px-3 py-2">Nama Customer (Wajib)</th>
+                        <th className="px-3 py-2">Kode/Kelas</th>
+                        <th className="px-3 py-2">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {parsedData.length > 50 && (
-                  <div className="p-2 text-center text-slate-500 text-[11px] bg-slate-900">
-                    ...dan {parsedData.length - 50} data lainnya
-                  </div>
-                )}
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {rawSheetData.rawRows.slice(Math.max(0, mappingConfig.startRow - 1), Math.max(0, mappingConfig.startRow - 1) + 40).map((row, idx) => {
+                        const rawAbsen = mappingConfig.absenColIndex >= 0 ? String(row[mappingConfig.absenColIndex] || '').trim() : '';
+                        const rawName = mappingConfig.nameColIndex >= 0 ? String(row[mappingConfig.nameColIndex] || '').trim() : '';
+                        const rawCat = mappingConfig.categoryColIndex >= 0 ? String(row[mappingConfig.categoryColIndex] || '').trim() : '';
+                        const isValid = rawAbsen.length > 0 && rawName.length > 0;
+
+                        return (
+                          <tr key={idx} className={isValid ? 'hover:bg-slate-800/40' : 'bg-rose-950/20 text-slate-500'}>
+                            <td className="px-3 py-2 font-mono text-slate-500">{idx + 1}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-amber-300">
+                              {rawAbsen || <span className="text-rose-400 italic">Kosong</span>}
+                            </td>
+                            <td className="px-3 py-2 font-medium text-slate-100">
+                              {rawName || <span className="text-rose-400 italic">Kosong</span>}
+                            </td>
+                            <td className="px-3 py-2 text-slate-400">{rawCat || '-'}</td>
+                            <td className="px-3 py-2 font-mono">
+                              {isValid ? (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">
+                                  Valid
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold text-[10px]">
+                                  Inkomplit
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -206,20 +505,21 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
         <div className="px-5 py-4 border-t border-slate-800 bg-slate-900/80 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl"
+            className="px-4 py-2 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl cursor-pointer"
           >
             Batal
           </button>
           <button
-            disabled={!parsedData || parsedData.length === 0}
+            disabled={!isRequirementMet || validCustomers.length === 0}
             onClick={handleConfirmImport}
-            className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+            className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <Check className="w-4 h-4" />
-            <span>Import {parsedData ? parsedData.length : 0} Data</span>
+            <span>Import {validCustomers.length} Customer Valid</span>
           </button>
         </div>
       </div>
     </div>
   );
 };
+

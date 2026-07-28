@@ -43,25 +43,24 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   });
   const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-  const cleanSessionName = activeSession.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-  const fileName = `Rekap_Foto_${cleanSessionName}_${dateCode}.xlsx`;
+  const cleanSessionName = activeSession.name.trim().replace(/[/\\?%*:|"<>]/g, '_');
+  const cleanDate = dateFormatted.trim().replace(/[/\\?%*:|"<>]/g, '-');
+  const fileName = `Rekap Foto - ${cleanSessionName} - ${cleanDate}.xlsx`;
 
   const markedPhotosCount = photos.filter((p) => p.isMarked).length;
 
   // Summary Text
-  const summaryText = `*REKAP FOTO LK SHOOTER - ${activeSession.name.toUpperCase()}*
-Tanggal: ${dateFormatted} (${timeFormatted})
-Total Foto Captured: ${photos.length} file ${markedPhotosCount > 0 ? `(⭐ ${markedPhotosCount} Ditandai)` : ''}
-Total Customer: ${customers.length} orang
-Status: ${customers.filter((c) => c.status === 'completed').length} Selesai, ${customers.filter((c) => c.status === 'in_progress').length} Sedang Difoto, ${customers.filter((c) => c.status === 'pending').length} Belum Difoto.
-
-Prefix File: ${activeSession.prefix}
+  const summaryText = `*REKAP FOTO LIANKHAY CAPTURE MANAGER*
+*Nama Sesi:* ${activeSession.name}
+*Tanggal:* ${dateFormatted} (${timeFormatted})
+*Total Foto:* ${photos.length} file ${markedPhotosCount > 0 ? `(⭐ ${markedPhotosCount} Ditandai)` : ''}
+*Total Customer:* ${customers.length} orang
+*Prefix Sesi:* ${activeSession.prefix}
 `;
 
   // Helper to get Excel File object
   const getExcelFile = () => {
-    const bytes = generateExcelWorkbook(photos, customers);
+    const bytes = generateExcelWorkbook(photos, customers, activeSession.name, dateFormatted, activeSession.prefix);
     const blob = new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
@@ -76,24 +75,44 @@ Prefix File: ${activeSession.prefix}
     try {
       const file = getExcelFile();
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Rekap Foto Studio - ${activeSession.name}`,
-          text: summaryText,
-        });
-      } else if (navigator.share) {
-        await navigator.share({
-          title: `Rekap Foto Studio - ${activeSession.name}`,
-          text: summaryText,
-        });
+      // Attempt 1: Native Share with File Attachment
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Rekap Foto Studio - ${activeSession.name}`,
+            text: summaryText,
+          });
+          return;
+        } catch (shareErr: any) {
+          if (shareErr.name === 'AbortError') {
+            return; // User clicked cancel in native share dialog
+          }
+          console.log('Direct file sharing not accepted by browser/OS, falling back to download + text share:', shareErr);
+        }
+      }
+
+      // Fallback: Direct Download .XLSX file FIRST
+      handleDirectDownload();
+
+      // Attempt 2: Native Share with Text Summary
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({
+            title: `Rekap Foto Studio - ${activeSession.name}`,
+            text: `${summaryText}\n\n📁 File Excel (${fileName}) telah diunduh. Silakan lampirkan file Excel ini dalam pesan.`,
+          });
+        } catch (textShareErr: any) {
+          if (textShareErr.name !== 'AbortError') {
+            console.log('Text share error:', textShareErr);
+          }
+        }
       } else {
-        handleDirectDownload();
+        alert(`File Excel (${fileName}) telah berhasil diunduh ke folder Download HP/Laptop Anda.\n\nSilakan buka aplikasi tujuan (WhatsApp, Email, Drive) dan pilih lampirkan file.`);
       }
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.error('Share error:', err);
-      }
+      console.error('Share process error:', err);
+      handleDirectDownload();
     } finally {
       setIsSharingNative(false);
     }

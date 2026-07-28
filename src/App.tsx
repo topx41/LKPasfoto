@@ -77,9 +77,9 @@ export default function App() {
     }, 4000);
   }, []);
 
-  // Check for shared Excel file from WhatsApp Share Target Endpoint
+  // Check for shared Excel file from WhatsApp Share Target Endpoint or Service Worker Cache
   useEffect(() => {
-    const checkPendingSharedImport = () => {
+    const checkPendingSharedImport = async () => {
       try {
         const raw = localStorage.getItem('foto_studio_pending_shared_import');
         if (raw) {
@@ -90,6 +90,27 @@ export default function App() {
             setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
             setIsImportOpen(true);
             showToast(`⚡ File Excel (${parsed.fileName || 'WhatsApp'}) berhasil diterima!`);
+            return;
+          }
+        }
+
+        // Check Service Worker cache from PWA Web Share Target API
+        if ('caches' in window) {
+          const cache = await caches.open('shared-files-cache');
+          const response = await cache.match('/shared-excel-file');
+          if (response) {
+            const blob = await response.blob();
+            const file = new File([blob], 'Excel_Bagikan.xlsx', {
+              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const customers = await parseCustomerExcel(file);
+            await cache.delete('/shared-excel-file');
+            if (customers.length > 0) {
+              setSharedImportData(customers);
+              setSharedImportFileName('Excel_Diterima.xlsx');
+              setIsImportOpen(true);
+              showToast(`⚡ File Excel dari WhatsApp berhasil diterima (${customers.length} customer)!`);
+            }
           }
         }
       } catch (e) {

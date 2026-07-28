@@ -8,50 +8,166 @@ export interface ImportedCustomer {
   notes?: string;
 }
 
-export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedCustomer[] {
+export interface RawExcelSheetData {
+  sheetName: string;
+  rawRows: any[][];
+  maxCols: number;
+}
+
+export interface ColumnMappingConfig {
+  startRow: number; // 1-indexed (e.g. 2 means start reading data from row 2)
+  headerRow: number; // 1-indexed (e.g. 1 means row 1 has column labels)
+  nameColIndex: number; // -1 if not selected
+  absenColIndex: number; // -1 if not selected
+  categoryColIndex: number; // -1 if not selected
+  notesColIndex: number; // -1 if not selected
+}
+
+export interface MappedCustomerResult {
+  validCustomers: ImportedCustomer[];
+  skippedCount: number;
+  totalDataRows: number;
+}
+
+export function extractRawExcelData(data: ArrayBuffer | Uint8Array): RawExcelSheetData {
   const workbook = XLSX.read(data, { type: 'array' });
-  
+
   if (!workbook.SheetNames.length) {
     throw new Error('File Excel tidak memiliki sheet.');
   }
 
-  const firstSheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[firstSheetName];
-  const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
 
-  if (jsonRows.length === 0) {
-    return [];
+  let maxCols = 0;
+  rawRows.forEach((r) => {
+    if (Array.isArray(r) && r.length > maxCols) {
+      maxCols = r.length;
+    }
+  });
+
+  return { sheetName, rawRows, maxCols };
+}
+
+export function autoDetectColumnMapping(rawRows: any[][], maxCols: number): ColumnMappingConfig {
+  let headerRowIndex = 0;
+  let startRowIndex = 1;
+
+  for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+    const row = rawRows[i];
+    if (Array.isArray(row) && row.some((cell) => String(cell).trim().length > 0)) {
+      headerRowIndex = i;
+      startRowIndex = i + 1;
+      break;
+    }
   }
 
-  // Detect column header for Customer Name & Absen/ID
-  const sampleRow = jsonRows[0];
-  const keys = Object.keys(sampleRow);
+  const headerRow = rawRows[headerRowIndex] || [];
 
-  let nameKey = keys.find((k) =>
-    /nama|customer|client|orang|peserta|siswa|name/i.test(k)
-  ) || keys[0];
+  let nameColIndex = -1;
+  let absenColIndex = -1;
+  let categoryColIndex = -1;
+  let notesColIndex = -1;
 
-  let codeKey = keys.find((k) => /absen|id|kode|code|no|nomor|nis/i.test(k) && k !== nameKey);
-  let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
-  let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
+  for (let c = 0; c < Math.max(headerRow.length, maxCols); c++) {
+    const val = String(headerRow[c] || '').toLowerCase().trim();
+    if (!val) continue;
 
-  const customers: ImportedCustomer[] = jsonRows
-    .map((row): ImportedCustomer | null => {
-      const rawName = String(row[nameKey] || '').trim();
-      if (!rawName) return null;
+    if (nameColIndex === -1 && /nama|customer|siswa|peserta|client|name/i.test(val)) {
+      nameColIndex = c;
+    } else if (
+      absenColIndex === -1 &&
+      /absen|id|nis|no|nomor|number|urut/i.test(val) &&
+      !/nama|file|foto/i.test(val)
+    ) {
+      absenColIndex = c;
+    } else if (
+      categoryColIndex === -1 &&
+      /kelas|kategori|kelompok|grup|category|code/i.test(val)
+    ) {
+      categoryColIndex = c;
+    } else if (
+      notesColIndex === -1 &&
+      /catatan|keterangan|note|hp|phone|telepon/i.test(val)
+    ) {
+      notesColIndex = c;
+    }
+  }
 
-      const codeVal = codeKey ? String(row[codeKey]).trim() : undefined;
+  if (nameColIndex === -1 && maxCols > 1) nameColIndex = 1;
+  if (nameColIndex === -1 && maxCols > 0) nameColIndex = 0;
 
-      return {
+  if (absenColIndex === -1 && maxCols > 0 && nameColIndex !== 0) absenColIndex = 0;
+  if (absenColIndex === -1 && maxCols > 1 && nameColIndex !== 1) absenColIndex = 1;
+
+  return {
+    headerRow: headerRowIndex + 1,
+    startRow: startRowIndex + 1,
+    nameColIndex,
+    absenColIndex,
+    categoryColIndex,
+    notesColIndex,
+  };
+}
+
+export function processMappedExcelCustomers(
+  rawRows: any[][],
+  config: ColumnMappingConfig
+): MappedCustomerResult {
+  const startRowIdx = Math.max(0, config.startRow - 1);
+  const dataRows = rawRows.slice(startRowIdx);
+
+  const validCustomers: ImportedCustomer[] = [];
+  let skippedCount = 0;
+
+  dataRows.forEach((row) => {
+    if (!Array.isArray(row)) return;
+
+    const rawName =
+      config.nameColIndex >= 0 && row[config.nameColIndex] !== undefined
+        ? String(row[config.nameColIndex]).trim()
+        : '';
+
+    const rawAbsen =
+      config.absenColIndex >= 0 && row[config.absenColIndex] !== undefined
+        ? String(row[config.absenColIndex]).trim()
+        : '';
+
+    const rawCategory =
+      config.categoryColIndex >= 0 && row[config.categoryColIndex] !== undefined
+        ? String(row[config.categoryColIndex]).trim()
+        : undefined;
+
+    const rawNotes =
+      config.notesColIndex >= 0 && row[config.notesColIndex] !== undefined
+        ? String(row[config.notesColIndex]).trim()
+        : undefined;
+
+    if (rawName.length > 0 && rawAbsen.length > 0) {
+      validCustomers.push({
         name: rawName,
-        code: codeVal,
-        category: categoryKey ? String(row[categoryKey]).trim() : undefined,
-        notes: notesKey ? String(row[notesKey]).trim() : undefined,
-      };
-    })
-    .filter((c): c is ImportedCustomer => Boolean(c));
+        code: rawAbsen,
+        category: rawCategory,
+        notes: rawNotes,
+      });
+    } else if (rawName.length > 0 || rawAbsen.length > 0) {
+      skippedCount++;
+    }
+  });
 
-  return customers;
+  return {
+    validCustomers,
+    skippedCount,
+    totalDataRows: dataRows.length,
+  };
+}
+
+export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedCustomer[] {
+  const rawData = extractRawExcelData(data);
+  const config = autoDetectColumnMapping(rawData.rawRows, rawData.maxCols);
+  const result = processMappedExcelCustomers(rawData.rawRows, config);
+  return result.validCustomers;
 }
 
 export async function parseCustomerExcel(file: File): Promise<ImportedCustomer[]> {
@@ -75,45 +191,50 @@ export async function parseCustomerExcel(file: File): Promise<ImportedCustomer[]
 
 export function generateExcelWorkbook(
   photos: PhotoRecord[],
-  customers: Customer[]
+  customers: Customer[],
+  sessionName: string = 'Sesi Utama',
+  sessionDate: string = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }),
+  prefix: string = ''
 ): Uint8Array {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: Rekap Foto (List of photos taken)
-  const photoData = photos.map((p, index) => ({
-    'No': index + 1,
-    'Nama': p.customerName,
-    'Nomor Absen / No ID': p.absenceNumber || p.customerCode || '-',
-    'Nomor File': p.fileName,
-    'Tandai': p.isMarked ? '⭐ Ya' : 'Tidak',
-    'Keterangan': p.notes || '-',
-    'Waktu Capture': new Date(p.timestamp).toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
-  }));
+  // Sheet 1: Rekap Foto
+  const photoAOA: any[][] = [
+    ['REKAP FOTO STUDIO - LIANKHAY CAPTURE MANAGER'],
+    [`Nama Sesi: ${sessionName}`, `Tanggal: ${sessionDate}`, `Prefix: ${prefix || '-'}`],
+    [`Total Foto: ${photos.length}`, `Total Customer: ${customers.length}`],
+    [],
+    ['No', 'Nama Customer', 'Nomor Absen / No ID', 'Nomor File', 'Tandai', 'Keterangan', 'Waktu Capture'],
+  ];
 
-  const photoSheet = XLSX.utils.json_to_sheet(
-    photoData.length > 0
-      ? photoData
-      : [
-          {
-            'No': '-',
-            'Nama': 'Belum ada data foto',
-            'Nomor Absen / No ID': '-',
-            'Nomor File': '-',
-            'Tandai': '-',
-            'Keterangan': '-',
-            'Waktu Capture': '-',
-          },
-        ]
-  );
-  
-  // Set column widths
+  if (photos.length > 0) {
+    photos.forEach((p, index) => {
+      photoAOA.push([
+        index + 1,
+        p.customerName,
+        p.absenceNumber || p.customerCode || '-',
+        p.fileName,
+        p.isMarked ? '⭐ Ya' : 'Tidak',
+        p.notes || '-',
+        new Date(p.timestamp).toLocaleString('id-ID', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+      ]);
+    });
+  } else {
+    photoAOA.push(['-', 'Belum ada data foto', '-', '-', '-', '-', '-']);
+  }
+
+  const photoSheet = XLSX.utils.aoa_to_sheet(photoAOA);
   photoSheet['!cols'] = [
     { wch: 6 },
     { wch: 25 },
@@ -126,36 +247,36 @@ export function generateExcelWorkbook(
 
   XLSX.utils.book_append_sheet(wb, photoSheet, 'Rekap Foto');
 
-  // Sheet 2: Daftar Customer (Summary)
-  const customerData = customers.map((c, index) => ({
-    'No': index + 1,
-    'Nama Customer': c.name,
-    'No ID / Absen': c.absenceNumber || c.code || '-',
-    'Kategori': c.category || '-',
-    'Jumlah Foto': c.photoCount,
-    'Status': c.status === 'completed' ? 'Selesai' : c.status === 'in_progress' ? 'Sedang Difoto' : 'Belum Difoto',
-  }));
+  // Sheet 2: Daftar Customer
+  const customerAOA: any[][] = [
+    ['DAFTAR CUSTOMER - LIANKHAY CAPTURE MANAGER'],
+    [`Nama Sesi: ${sessionName}`, `Tanggal: ${sessionDate}`],
+    [`Total Customer: ${customers.length}`],
+    [],
+    ['No', 'Nama Customer', 'Nomor Absen / No ID', 'Kategori / Kelas', 'Jumlah Foto', 'Status'],
+  ];
 
-  const customerSheet = XLSX.utils.json_to_sheet(
-    customerData.length > 0
-      ? customerData
-      : [
-          {
-            'No': '-',
-            'Nama Customer': 'Belum ada customer',
-            'No ID / Absen': '-',
-            'Kategori': '-',
-            'Jumlah Foto': 0,
-            'Status': '-',
-          },
-        ]
-  );
+  if (customers.length > 0) {
+    customers.forEach((c, index) => {
+      customerAOA.push([
+        index + 1,
+        c.name,
+        c.absenceNumber || c.code || '-',
+        c.category || '-',
+        c.photoCount,
+        c.status === 'completed' ? 'Selesai' : c.status === 'in_progress' ? 'Sedang Difoto' : 'Belum Difoto',
+      ]);
+    });
+  } else {
+    customerAOA.push(['-', 'Belum ada customer', '-', '-', 0, '-']);
+  }
 
+  const customerSheet = XLSX.utils.aoa_to_sheet(customerAOA);
   customerSheet['!cols'] = [
     { wch: 6 },
     { wch: 25 },
-    { wch: 18 },
-    { wch: 18 },
+    { wch: 20 },
+    { wch: 20 },
     { wch: 15 },
     { wch: 15 },
   ];
@@ -169,40 +290,42 @@ export function generateExcelWorkbook(
 export async function downloadOrShareExcel(
   photos: PhotoRecord[],
   customers: Customer[],
-  sessionName?: string
+  sessionName: string = 'Sesi Utama',
+  sessionDate: string = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }),
+  prefix: string = ''
 ): Promise<{ method: 'share' | 'download'; success: boolean }> {
-  const excelArray = generateExcelWorkbook(photos, customers);
+  const excelArray = generateExcelWorkbook(photos, customers, sessionName, sessionDate, prefix);
   const blob = new Blob([excelArray], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-  const cleanSession = sessionName ? sessionName.replace(/[^a-zA-Z0-9]/g, '_') : 'Studio';
-  const fileName = `Rekap_Foto_${cleanSession}_${dateStr}.xlsx`;
+  const cleanSession = sessionName ? sessionName.trim().replace(/[/\\?%*:|"<>]/g, '_') : 'Sesi';
+  const cleanDate = sessionDate.trim().replace(/[/\\?%*:|"<>]/g, '-');
+  const fileName = `Rekap Foto - ${cleanSession} - ${cleanDate}.xlsx`;
 
   const file = new File([blob], fileName, {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  // Try Web Share API if supported
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
         files: [file],
-        title: `Rekap Foto Studio${sessionName ? ` - ${sessionName}` : ''}`,
-        text: `Rekap foto studio ${sessionName ? `(${sessionName})` : ''} tanggal ${now.toLocaleDateString('id-ID')}. Total foto: ${photos.length}.`,
+        title: `Rekap Foto - ${sessionName}`,
+        text: `Rekap foto studio ${sessionName} (${sessionDate}). Total foto: ${photos.length}.`,
       });
       return { method: 'share', success: true };
     } catch (err: any) {
       if (err.name === 'AbortError') {
         return { method: 'share', success: false };
       }
-      // Fallback to direct download if share failed
     }
   }
 
-  // Fallback direct browser download
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -214,4 +337,5 @@ export async function downloadOrShareExcel(
 
   return { method: 'download', success: true };
 }
+
 
