@@ -11,32 +11,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # Checkout source
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # Install Node.js
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24
 
-      - run: npm install
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
 
-      - run: npm run build
+      # Build React
+      - name: Build Web
+        run: npm run build
 
-      - run: npx cap sync android
-
-      - uses: actions/setup-java@v4
+      # Setup Java
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - run: |
+      # Sync Capacitor
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # Build APK
+      - name: Build APK
+        run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - uses: actions/upload-artifact@v4
+      # Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: Android-APK
           path: android/app/build/outputs/apk/release/app-release.apk
