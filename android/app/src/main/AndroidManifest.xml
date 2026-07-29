@@ -21,6 +21,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+           <intent-filter>
+               <action android:name="android.intent.action.SEND" />
+               <category android:category="android.intent.category.DEFAULT" />
+               <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+               <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="text/csv" />
+            </intent-filter>
 
         </activity>
 
