@@ -1020,7 +1020,7 @@ export default function App() {
 
       {/* Global File Drag Overlay (Share Intent Catching Zone) */}
       {isDraggingFile && (
-        <div className="fixed inset-0 z-50 bg-emerald-950/80 backdrop-blur-md border-4 border-dashed border-emerald-400 flex flex-col items-center justify-center text-white p-6 animate-fade-in pointer-events-none">
+        <div className="fixed inset-0 z-[70] bg-emerald-950/80 backdrop-blur-md border-4 border-dashed border-emerald-400 flex flex-col items-center justify-center text-white p-6 animate-fade-in pointer-events-none">
           <div className="p-4 bg-emerald-500/20 text-emerald-300 rounded-full mb-3 animate-bounce">
             <FileSpreadsheet className="w-12 h-12" />
           </div>

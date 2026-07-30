@@ -11,44 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+      # Checkout source
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js (Menggunakan Node 20 LTS yang stabil)
+      # Setup Node.js (Gunakan Node 20 LTS agar stabil)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      # 3. Install dependencies
+      # Install dependencies
       - name: Install dependencies
         run: npm ci || npm install
 
-      # 4. Build aplikasi Web (React + Vite)
+      # Build Web Assets (React / Vite)
       - name: Build Web
         run: npm run build
 
-      # 5. Setup Java 21 JDK
+      # Setup Java 21
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # 6. Verifikasi Java
+      # Verify Java Environment
       - name: Verify Java
         run: |
           java -version
           javac -version
           echo "JAVA_HOME=$JAVA_HOME"
 
-      # 7. Setup Android SDK
+      # Setup Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 8. Otomatis Tambah Platform Android (jika belum ada) & Sync Capacitor
+      # Add Android Platform if missing & Sync Capacitor
       - name: Add Android Platform & Sync
         run: |
           if [ ! -d "android" ]; then
@@ -58,14 +58,14 @@ jobs:
           echo "Melakukan sync file web ke project Android..."
           npx cap sync android
 
-      # 9. Build Debug APK dengan Gradle
+      # Build Debug APK
       - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # 10. Tampilkan file output APK
+      # Show generated outputs
       - name: Show Build Outputs
         run: |
           echo "===== APK ====="
@@ -74,7 +74,7 @@ jobs:
           echo "===== AAB ====="
           find android/app/build/outputs/bundle -type f || true
 
-      # 11. Upload file APK ke Artifact GitHub
+      # Upload APK & AAB Artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

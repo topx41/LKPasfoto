@@ -64,28 +64,79 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   const [replaceExisting, setReplaceExisting] = useState<boolean>(false);
   const [showWhatsAppGuide, setShowWhatsAppGuide] = useState<boolean>(false);
 
+  // Reset / Sync State when isOpen or initialParsedData changes
   useEffect(() => {
-    if (initialParsedData && initialParsedData.length > 0 && !rawSheetData) {
-      // Synthesize rawSheetData from initialParsedData if opened from Share Target
-      const header = ['Nomor Absen', 'Nama Customer', 'Kategori / Kelas', 'Catatan'];
-      const rows = initialParsedData.map((c) => [c.code || '', c.name || '', c.category || '', c.notes || '']);
-      const synthesizedRows = [header, ...rows];
-      setRawSheetData({
-        sheetName: 'Imported_Excel',
-        rawRows: synthesizedRows,
-        maxCols: 4,
-      });
-      setMappingConfig({
-        startRow: 2,
-        headerRow: 1,
-        absenColIndex: 0,
-        nameColIndex: 1,
-        categoryColIndex: 2,
-        notesColIndex: 3,
-      });
-      if (initialFileName) setFileName(initialFileName);
+    if (isOpen) {
+      if (initialParsedData && initialParsedData.length > 0) {
+        const header = ['Nomor Absen', 'Nama Customer', 'Kategori / Kelas', 'Catatan'];
+        const rows = initialParsedData.map((c) => [
+          String(c?.code || ''),
+          String(c?.name || ''),
+          String(c?.category || ''),
+          String(c?.notes || ''),
+        ]);
+        const synthesizedRows = [header, ...rows];
+        setRawSheetData({
+          sheetName: 'Imported_Excel',
+          rawRows: synthesizedRows,
+          maxCols: 4,
+        });
+        setMappingConfig({
+          startRow: 2,
+          headerRow: 1,
+          absenColIndex: 0,
+          nameColIndex: 1,
+          categoryColIndex: 2,
+          notesColIndex: 3,
+        });
+        if (initialFileName) setFileName(initialFileName);
+      } else {
+        // Reset state on clean open
+        setRawSheetData(null);
+        setErrorMsg(null);
+        setFileName('');
+        setIsLoading(false);
+        setMappingConfig({
+          startRow: 2,
+          headerRow: 1,
+          nameColIndex: -1,
+          absenColIndex: -1,
+          categoryColIndex: -1,
+          notesColIndex: -1,
+        });
+      }
     }
-  }, [initialParsedData, initialFileName]);
+  }, [isOpen, initialParsedData, initialFileName]);
+
+  const columnOptions = useMemo(() => {
+    if (!rawSheetData || !Array.isArray(rawSheetData.rawRows)) return [];
+    try {
+      const options = [];
+      const headerRowIdx = Math.max(0, mappingConfig.headerRow - 1);
+      const headerRow = rawSheetData.rawRows[headerRowIdx] || [];
+
+      for (let c = 0; c < (rawSheetData.maxCols || 0); c++) {
+        const colLetter = getColumnLetter(c);
+        const cellVal = headerRow[c] !== undefined && headerRow[c] !== null ? String(headerRow[c]).trim() : '';
+        const label = cellVal ? cellVal : `[Kosong]`;
+        options.push({ index: c, colLetter, label });
+      }
+      return options;
+    } catch (err) {
+      console.error('Error in columnOptions:', err);
+      return [];
+    }
+  }, [rawSheetData, mappingConfig.headerRow]);
+
+  const mappedResult = useMemo(() => {
+    if (!rawSheetData || !Array.isArray(rawSheetData.rawRows)) return null;
+    try {
+      return processMappedExcelCustomers(rawSheetData.rawRows, mappingConfig);
+    } catch (err) {
+      console.error('Error in mappedResult:', err);
+      return null;
+    }
+  }, [rawSheetData, mappingConfig]);
 
   if (!isOpen) return null;
 
@@ -104,32 +155,12 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
       const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
       setMappingConfig(autoConfig);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Gagal membaca file Excel. Pastikan format .xlsx atau .xls valid.');
+      setErrorMsg(err?.message || 'Gagal membaca file Excel. Pastikan format .xlsx atau .xls valid.');
       setRawSheetData(null);
     } finally {
       setIsLoading(false);
     }
   };
-
-  const columnOptions = useMemo(() => {
-    if (!rawSheetData) return [];
-    const options = [];
-    const headerRowIdx = Math.max(0, mappingConfig.headerRow - 1);
-    const headerRow = rawSheetData.rawRows[headerRowIdx] || [];
-
-    for (let c = 0; c < rawSheetData.maxCols; c++) {
-      const colLetter = getColumnLetter(c);
-      const cellVal = headerRow[c] !== undefined ? String(headerRow[c]).trim() : '';
-      const label = cellVal ? cellVal : `[Kosong]`;
-      options.push({ index: c, colLetter, label });
-    }
-    return options;
-  }, [rawSheetData, mappingConfig.headerRow]);
-
-  const mappedResult = useMemo(() => {
-    if (!rawSheetData) return null;
-    return processMappedExcelCustomers(rawSheetData.rawRows, mappingConfig);
-  }, [rawSheetData, mappingConfig]);
 
   const isRequirementMet = mappingConfig.nameColIndex >= 0;
   const validCustomers = mappedResult ? mappedResult.validCustomers : [];
@@ -144,7 +175,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">

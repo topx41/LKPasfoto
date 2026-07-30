@@ -186,7 +186,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   const isWebShareSupported = typeof navigator !== 'undefined' && Boolean(navigator.share);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
