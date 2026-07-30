@@ -903,10 +903,17 @@ export default function App() {
       </section>
 
       {/* MAIN CONTENT VIEWS */}
+<<<<<<< HEAD
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-4 pb-20 sm:pb-8 flex flex-col min-h-0">
         {/* 1. HOME VIEW */}
         {activeMainTab === 'HOME' && (
           <div className="flex-1 flex flex-col space-y-3 sm:space-y-4 min-h-0">
+=======
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-6 pb-24 sm:pb-8">
+        {/* 1. HOME VIEW */}
+        {activeMainTab === 'HOME' && (
+          <div className="space-y-3 sm:space-y-6">
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
             {/* CAPTURE CONTROL CARD (MODUL CAPTURE DITAMPILKAN DI HOME SAJA) */}
             <CaptureControl
               onCapture={handleCapture}
@@ -919,6 +926,7 @@ export default function App() {
               totalCapturedToday={sessionPhotos.length}
             />
 
+<<<<<<< HEAD
             {/* REKAP FOTO SCROLLABLE LIST */}
             <div className="flex-1 min-h-[350px] sm:min-h-[420px] max-h-[calc(100vh-280px)] overflow-hidden flex flex-col">
               <PhotoHistoryList
@@ -929,6 +937,128 @@ export default function App() {
                 onExportExcel={handleExportExcel}
                 isSharing={isSharing}
               />
+=======
+            {/* QUICK PREFIX & FILE NUMBER CONTROL BAR */}
+            <div className="p-2.5 sm:p-4 bg-slate-900/80 border border-slate-800 rounded-xl sm:rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block font-medium text-[10px] sm:text-xs">Prefix Sesi:</span>
+                  <input
+                    type="text"
+                    value={settings.prefix}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSettings({ ...settings, prefix: val });
+                      updateActiveSessionSettings(val, settings.currentNumber);
+                    }}
+                    className="px-2 py-1 bg-slate-800 border border-slate-700 font-mono text-sky-400 font-bold rounded-lg w-20 sm:w-28 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block font-medium text-[10px] sm:text-xs">Nomor Urut:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={settings.currentNumber}
+                    onChange={(e) => {
+                      const num = parseInt(e.target.value) || 1;
+                      setSettings({ ...settings, currentNumber: num });
+                      updateActiveSessionSettings(settings.prefix, num);
+                    }}
+                    className="px-2 py-1 bg-slate-800 border border-slate-700 font-mono text-slate-100 font-bold rounded-lg w-16 sm:w-20 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setActiveMainTab('SESI')}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg flex items-center gap-1 font-medium transition-colors cursor-pointer text-xs"
+                >
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  <span>Sesi ({sessions.length})</span>
+                </button>
+
+                <button
+                  onClick={handleResetSessionCounter}
+                  className="px-2 py-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition-colors cursor-pointer text-xs"
+                  title="Reset counter nomor sesi ke #1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* HOME OVERVIEW HIGHLIGHT CARDS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {/* Customer Queue Quick Card */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <span className="font-bold text-slate-100 text-xs">Customer Sesi Ini</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveMainTab('CUSTOMER')}
+                    className="text-xs text-sky-400 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <span>Lihat Semua ({sessionCustomers.length})</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Sedang Difoto:</span>
+                    <span className="font-bold text-sky-300 text-sm">
+                      {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleNextCustomer}
+                    className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-xs"
+                  >
+                    Customer Berikutnya
+                  </button>
+                </div>
+              </div>
+
+              {/* Rekap Photo Quick Card */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <span className="font-bold text-slate-100 text-xs">Hasil Rekap Foto</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveMainTab('REKAP')}
+                    className="text-xs text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <span>Buka Rekap ({sessionPhotos.length})</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Total Foto Sesi:</span>
+                    <span className="font-bold text-emerald-300 text-sm">{sessionPhotos.length} Foto Tersimpan</span>
+                  </div>
+                  <button
+                    onClick={handleExportExcel}
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs"
+                  >
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
             </div>
           </div>
         )}
@@ -973,21 +1103,38 @@ export default function App() {
             </div>
 
             {/* List of Sessions */}
+<<<<<<< HEAD
             <div className="grid grid-cols-1 gap-2.5">
               {sessions.map((session) => {
                 const isCurrent = session.id === activeSessionId;
                 const isEditing = editingSessionId === session.id;
+=======
+            <div className="grid grid-cols-1 gap-3">
+              {sessions.map((session) => {
+                const isCurrent = session.id === activeSessionId;
+                const isEditing = editingSessionId === session.id;
+                const custCount = customers.filter((c) => c.sessionId === session.id).length;
+                const photoCount = photos.filter((p) => p.sessionId === session.id).length;
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
 
                 return (
                   <div
                     key={session.id}
+<<<<<<< HEAD
                     className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
+=======
+                    className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
                       isCurrent
                         ? 'bg-sky-950/40 border-sky-500/50 shadow-md shadow-sky-500/10'
                         : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
                     }`}
                   >
+<<<<<<< HEAD
                     <div className="flex-1 min-w-0">
+=======
+                    <div className="space-y-1 flex-1">
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
                       <div className="flex items-center gap-2 flex-wrap">
                         {isEditing ? (
                           <input
@@ -997,12 +1144,20 @@ export default function App() {
                             className="px-2 py-1 bg-slate-900 border border-sky-500 rounded text-xs font-bold text-slate-100"
                           />
                         ) : (
+<<<<<<< HEAD
                           <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+=======
+                          <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
                             {session.name}
                             {isCurrent && (
                               <span className="px-2 py-0.5 rounded-full bg-sky-500 text-slate-950 font-extrabold text-[10px] flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3" />
+<<<<<<< HEAD
                                 AKTIF
+=======
+                                SEDANG AKTIF
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
                               </span>
                             )}
                           </h3>
@@ -1016,6 +1171,23 @@ export default function App() {
                           No: <strong className="text-amber-300">#{formatFileNumber(session.currentNumber || 1, settings.digits)}</strong>
                         </span>
                       </div>
+<<<<<<< HEAD
+=======
+
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editSessionNotes}
+                          onChange={(e) => setEditSessionNotes(e.target.value)}
+                          placeholder="Catatan sesi..."
+                          className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-300 w-full max-w-sm mt-1"
+                        />
+                      ) : (
+                        <p className="text-xs text-slate-400">
+                          {session.notes ? session.notes : `Dibuat: ${session.date}`} • {custCount} Customer • {photoCount} Foto
+                        </p>
+                      )}
+>>>>>>> 3613c51b9e5761df9620207a130abd4c8441ff23
                     </div>
 
                     <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
