@@ -30,24 +30,34 @@ export interface MappedCustomerResult {
 }
 
 export function extractRawExcelData(data: ArrayBuffer | Uint8Array): RawExcelSheetData {
-  const workbook = XLSX.read(data, { type: 'array' });
+  try {
+    const workbook = XLSX.read(data, { type: 'array' });
 
-  if (!workbook.SheetNames.length) {
-    throw new Error('File Excel tidak memiliki sheet.');
-  }
-
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
-
-  let maxCols = 0;
-  rawRows.forEach((r) => {
-    if (Array.isArray(r) && r.length > maxCols) {
-      maxCols = r.length;
+    if (!workbook.SheetNames || !workbook.SheetNames.length) {
+      throw new Error('File Excel tidak memiliki sheet yang valid.');
     }
-  });
 
-  return { sheetName, rawRows, maxCols };
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      throw new Error('Sheet dalam file Excel kosong atau tidak terbaca.');
+    }
+
+    const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
+
+    let maxCols = 0;
+    if (Array.isArray(rawRows)) {
+      rawRows.forEach((r) => {
+        if (Array.isArray(r) && r.length > maxCols) {
+          maxCols = r.length;
+        }
+      });
+    }
+
+    return { sheetName, rawRows: Array.isArray(rawRows) ? rawRows : [], maxCols };
+  } catch (err: any) {
+    throw new Error(err.message || 'Gagal mengekstrak data dari file Excel.');
+  }
 }
 
 export function autoDetectColumnMapping(rawRows: any[][], maxCols: number): ColumnMappingConfig {
@@ -176,20 +186,25 @@ export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedC
 }
 
 export async function parseCustomerExcel(file: File): Promise<ImportedCustomer[]> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        if (!e.target?.result) {
+          resolve([]);
+          return;
+        }
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
         const customers = parseArrayBufferExcel(data);
         resolve(customers);
       } catch (err) {
-        reject(err);
+        console.error('Failed to parse customer excel:', err);
+        resolve([]);
       }
     };
 
-    reader.onerror = (error) => reject(error);
+    reader.onerror = () => resolve([]);
     reader.readAsArrayBuffer(file);
   });
 }
@@ -292,6 +307,91 @@ export function generateExcelWorkbook(
   return new Uint8Array(excelBuffer);
 }
 
+export function generateCustomerExcelWorkbook(
+  customers: Customer[],
+  sessionName: string = 'Sesi Utama'
+): Uint8Array {
+  const wb = XLSX.utils.book_new();
+
+  const customerAOA: any[][] = [
+    ['DAFTAR CUSTOMER - TRANSFER DATA LIANKHAY CAPTURE'],
+    [`Sesi: ${sessionName}`, `Tanggal: ${new Date().toLocaleDateString('id-ID')}`],
+    [`Total Customer: ${customers.length}`],
+    [],
+    ['Nomor Absen / No ID', 'Nama Customer', 'Kategori / Kelas', 'Jumlah Foto', 'Catatan / Keterangan'],
+  ];
+
+  if (customers.length > 0) {
+    customers.forEach((c) => {
+      customerAOA.push([
+        c.absenceNumber || c.code || '',
+        c.name,
+        c.category || '',
+        c.photoCount || 0,
+        c.notes || '',
+      ]);
+    });
+  } else {
+    customerAOA.push(['1', 'Contoh Nama Customer', 'Kelas 10A', 0, 'Contoh Catatan']);
+  }
+
+  const customerSheet = XLSX.utils.aoa_to_sheet(customerAOA);
+  customerSheet['!cols'] = [
+    { wch: 20 },
+    { wch: 30 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 25 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, customerSheet, 'Data Customer');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Uint8Array(excelBuffer);
+}
+
+export async function downloadOrShareCustomersExcel(
+  customers: Customer[],
+  sessionName: string = 'Sesi Utama'
+): Promise<{ method: 'share' | 'download'; success: boolean }> {
+  const bytes = generateCustomerExcelWorkbook(customers, sessionName);
+  const blob = new Blob([bytes], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+  const cleanSession = sessionName ? sessionName.trim().replace(/[/\\?%*:|"<>]/g, '_') : 'Sesi';
+  const fileName = `Transfer Customer - ${cleanSession}.xlsx`;
+
+  const file = new File([blob], fileName, {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: `Transfer Data Customer - ${sessionName}`,
+        text: `File Excel Data Customer (${customers.length} customer) Sesi ${sessionName} untuk Transfer Data.`,
+      });
+      return { method: 'share', success: true };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { method: 'share', success: false };
+      }
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  return { method: 'download', success: true };
+}
+
 export async function downloadOrShareExcel(
   photos: PhotoRecord[],
   customers: Customer[],
@@ -316,7 +416,7 @@ export async function downloadOrShareExcel(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
         files: [file],

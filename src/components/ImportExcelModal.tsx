@@ -172,7 +172,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="font-bold text-emerald-400 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                Menerima File dari WhatsApp / Share Target PWA
+                Petunjuk Menerima &amp; Impor File Excel di Android (APK)
               </span>
               <button
                 onClick={() => setShowWhatsAppGuide(!showWhatsAppGuide)}
@@ -182,12 +182,18 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
               </button>
             </div>
             {showWhatsAppGuide && (
-              <div className="pt-2 border-t border-emerald-500/20 text-slate-300 space-y-1.5 text-[11px] leading-relaxed">
-                <p>
-                  <strong className="text-emerald-300">1. Share Target PWA:</strong> File Excel yang dikirim lewat tombol Bagikan WhatsApp / File Manager akan otomatis masuk ke menu pemetaan ini.
+              <div className="pt-2 border-t border-emerald-500/20 text-slate-300 space-y-2 text-[11px] leading-relaxed">
+                <p className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">1.</span>
+                  <span>
+                    <strong className="text-emerald-300">Impor Langsung dari HP (Rekomendasi Utama):</strong> Unduh file Excel dari chat WhatsApp ke HP Anda. Lalu tekan area kotak <strong className="text-sky-300">"Upload File Excel"</strong> di bawah ini untuk memilih file tersebut dari folder <strong className="text-amber-300">Download / Dokumen</strong> HP Anda.
+                  </span>
                 </p>
-                <p>
-                  <strong className="text-emerald-300">2. Requirement Field:</strong> Aplikasi mengharuskan adanya <span className="text-amber-300 font-bold">Nomor Absen</span> dan <span className="text-amber-300 font-bold">Nama Customer</span>.
+                <p className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">2.</span>
+                  <span>
+                    <strong className="text-emerald-300">Penyebab Aplikasi Tidak Muncul di Menu Share WhatsApp (Build APK):</strong> Jika dibuild menjadi APK (menggunakan Capacitor/Webview Wrapper), Android memerlukan konfigurasi <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300 font-mono text-[10px]">android.intent.action.SEND</code> di file <strong className="text-slate-200">AndroidManifest.xml</strong> project APK agar sistem Android mendaftarkan aplikasi sebagai penerima file dari WhatsApp.
+                  </span>
                 </p>
               </div>
             )}

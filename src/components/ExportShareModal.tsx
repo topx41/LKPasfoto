@@ -10,9 +10,14 @@ import {
   Copy,
   ExternalLink,
   MessageSquare,
+  Users,
 } from 'lucide-react';
 import { Customer, PhotoRecord, StudioSession } from '../types';
-import { generateExcelWorkbook } from '../utils/excelUtils';
+import {
+  generateExcelWorkbook,
+  generateCustomerExcelWorkbook,
+  downloadOrShareCustomersExcel,
+} from '../utils/excelUtils';
 
 interface ExportShareModalProps {
   isOpen: boolean;
@@ -46,6 +51,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
   const cleanSessionName = activeSession.name.trim().replace(/[/\\?%*:|"<>]/g, '_');
   const cleanDate = dateFormatted.trim().replace(/[/\\?%*:|"<>]/g, '-');
   const fileName = `Rekap Foto - ${cleanSessionName} - ${cleanDate}.xlsx`;
+  const customerFileName = `Transfer Customer - ${cleanSessionName}.xlsx`;
 
   const markedPhotosCount = photos.filter((p) => p.isMarked).length;
 
@@ -58,7 +64,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
 *Prefix Sesi:* ${activeSession.prefix}
 `;
 
-  // Helper to get Excel File object
+  // Helper to get Rekap Excel File object
   const getExcelFile = () => {
     const bytes = generateExcelWorkbook(photos, customers, activeSession.name, dateFormatted, activeSession.prefix);
     const blob = new Blob([bytes], {
@@ -69,13 +75,23 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     });
   };
 
-  // 1. Implicit Intent via Web Share API (Android / OS Share Sheet)
+  // Helper to get Customer Excel File object
+  const getCustomerExcelFile = () => {
+    const bytes = generateCustomerExcelWorkbook(customers, activeSession.name);
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    return new File([blob], customerFileName, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  };
+
+  // 1. Native Share Sheet for Rekap Excel File
   const handleNativeShare = async () => {
     setIsSharingNative(true);
     try {
       const file = getExcelFile();
 
-      // Attempt 1: Native Share with File Attachment
       if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -85,30 +101,24 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
           });
           return;
         } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') {
-            return; // User clicked cancel in native share dialog
-          }
-          console.log('Direct file sharing not accepted by browser/OS, falling back to download + text share:', shareErr);
+          if (shareErr.name === 'AbortError') return;
+          console.log('Direct file sharing error, falling back:', shareErr);
         }
       }
 
-      // Fallback: Direct Download .XLSX file FIRST
       handleDirectDownload();
 
-      // Attempt 2: Native Share with Text Summary
       if (typeof navigator !== 'undefined' && navigator.share) {
         try {
           await navigator.share({
             title: `Rekap Foto Studio - ${activeSession.name}`,
-            text: `${summaryText}\n\n📁 File Excel (${fileName}) telah diunduh. Silakan lampirkan file Excel ini dalam pesan.`,
+            text: `${summaryText}\n\n📁 File Excel (${fileName}) telah diunduh. Silakan lampirkan file Excel ini.`,
           });
         } catch (textShareErr: any) {
-          if (textShareErr.name !== 'AbortError') {
-            console.log('Text share error:', textShareErr);
-          }
+          if (textShareErr.name !== 'AbortError') console.log('Text share error:', textShareErr);
         }
       } else {
-        alert(`File Excel (${fileName}) telah berhasil diunduh ke folder Download HP/Laptop Anda.\n\nSilakan buka aplikasi tujuan (WhatsApp, Email, Drive) dan pilih lampirkan file.`);
+        alert(`File Excel (${fileName}) telah diunduh ke folder Download HP/Laptop Anda.`);
       }
     } catch (err: any) {
       console.error('Share process error:', err);
@@ -118,9 +128,21 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     }
   };
 
-  // 2. Direct Browser Download
+  // 2. Native Share Sheet for Customer Transfer Excel File
+  const handleShareCustomersNative = async () => {
+    setIsSharingNative(true);
+    try {
+      await downloadOrShareCustomersExcel(customers, activeSession.name);
+    } catch (err) {
+      console.error('Customer share error:', err);
+    } finally {
+      setIsSharingNative(false);
+    }
+  };
+
+  // 3. Direct Browser Download
   const handleDirectDownload = () => {
-    const bytes = generateExcelWorkbook(photos, customers);
+    const bytes = generateExcelWorkbook(photos, customers, activeSession.name, dateFormatted, activeSession.prefix);
     const blob = new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
@@ -134,17 +156,17 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // 3. Share to WhatsApp
+  // 4. Share to WhatsApp (1-Click Auto Download + Copy Text + Launch WhatsApp)
   const handleWhatsAppShare = () => {
-    // First trigger file download so user has the xlsx ready to attach
     handleDirectDownload();
+    handleCopySummary();
     const encodedText = encodeURIComponent(
-      `${summaryText}\n\n📁 *File Excel (${fileName})* telah diunduh. Silakan lampirkan file Excel tersebut dalam pesan WhatsApp ini.`
+      `${summaryText}\n\n📁 *File Excel: ${fileName}*\n_(File .xlsx telah diunduh di folder Download HP Anda. Tinggal tekan ikon klip 📎 untuk melampirkan file)_`
     );
     window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank');
   };
 
-  // 4. Share to Email
+  // 5. Share to Email
   const handleEmailShare = () => {
     handleDirectDownload();
     const subject = encodeURIComponent(`Rekap Foto Studio - ${activeSession.name} (${dateFormatted})`);
@@ -154,7 +176,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
 
-  // 5. Copy Text Summary
+  // 6. Copy Text Summary
   const handleCopySummary = () => {
     navigator.clipboard.writeText(summaryText);
     setCopied(true);
@@ -173,8 +195,8 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
               <Share2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-sm">Bagikan File Rekap Excel</h3>
-              <p className="text-[11px] text-slate-400">Implicit Intent untuk WhatsApp, Email & Aplikasi Lain</p>
+              <h3 className="font-bold text-slate-100 text-sm">Transfer &amp; Export Data Excel</h3>
+              <p className="text-[11px] text-slate-400">Popup Share Bawaan Android (Quick Share, WhatsApp, Drive, dll)</p>
             </div>
           </div>
           <button
@@ -202,10 +224,10 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
             </div>
           </div>
 
-          {/* Implicit Intent Action: Native Share Sheet */}
+          {/* Action 1: Share Rekap Data Excel via Native Android Popup */}
           <div className="space-y-2">
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              1. Bagikan File via Aplikasi HP / Laptop (Implicit Share)
+              1. Export Rekap Data Foto &amp; Customer (.xlsx)
             </label>
             <button
               onClick={handleNativeShare}
@@ -215,13 +237,31 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
               <Smartphone className="w-4 h-4" />
               <span>
                 {isWebShareSupported
-                  ? 'Buka Menu Bagikan (WhatsApp, Email, Drive, dll)'
-                  : 'Unduh & Buka Menu Bagikan'}
+                  ? 'Buka Popup Share Android (Quick Share, WA, Drive, dll)'
+                  : 'Unduh & Bagikan Rekap Excel'}
+              </span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+            </button>
+          </div>
+
+          {/* Action 2: Transfer Data Customer Excel via Native Android Popup */}
+          <div className="space-y-2 pt-1">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              2. Transfer In / Transfer Out Data Customer (.xlsx)
+            </label>
+            <button
+              onClick={handleShareCustomersNative}
+              disabled={isSharingNative}
+              className="w-full py-3 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
+            >
+              <Users className="w-4 h-4" />
+              <span>
+                Transfer / Bagikan Data Customer ({customers.length} Orang)
               </span>
               <ExternalLink className="w-3.5 h-3.5 opacity-70" />
             </button>
             <p className="text-[10px] text-slate-500 text-center">
-              Memanggil dialog sistem Android / OS untuk memilih aplikasi tujuan secara langsung.
+              Membuka popup Share Android untuk mengirimkan file Excel khusus daftar customer.
             </p>
           </div>
 
@@ -230,7 +270,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
               <div className="w-full border-t border-slate-800"></div>
             </div>
             <div className="relative flex justify-center text-[10px] uppercase">
-              <span className="bg-slate-900 px-2 text-slate-500 font-semibold">Atau Bagikan Spesifik</span>
+              <span className="bg-slate-900 px-2 text-slate-500 font-semibold">Atau Bagikan Langsung</span>
             </div>
           </div>
 
@@ -246,7 +286,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
                 <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <p className="text-xs font-bold text-slate-200">WhatsApp</p>
-              <p className="text-[10px] text-slate-400">Unduh & kirim pesan ringkasan ke WA</p>
+              <p className="text-[10px] text-slate-400">Unduh &amp; kirim pesan ringkasan ke WA</p>
             </button>
 
             {/* Email */}

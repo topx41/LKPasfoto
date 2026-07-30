@@ -11,12 +11,15 @@ import {
   X,
   ChevronDown,
   AlertTriangle,
+  Share2,
 } from 'lucide-react';
 import { Customer } from '../types';
+import { downloadOrShareCustomersExcel } from '../utils/excelUtils';
 
 interface CustomerQueueProps {
   customers: Customer[];
   activeCustomerId: string | null;
+  activeSessionName?: string;
   onSelectCustomer: (customer: Customer) => void;
   onNextCustomer: () => void;
   onOpenImportModal: () => void;
@@ -30,6 +33,7 @@ interface CustomerQueueProps {
 export const CustomerQueue: React.FC<CustomerQueueProps> = ({
   customers,
   activeCustomerId,
+  activeSessionName = 'Sesi Utama',
   onSelectCustomer,
   onNextCustomer,
   onOpenImportModal,
@@ -43,10 +47,22 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
   const [nameInput, setNameInput] = useState('');
   const [absenceInput, setAbsenceInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSharingCustomers, setIsSharingCustomers] = useState(false);
 
   // Bulk Selection State for Front View
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
+
+  const handleShareCustomersExcel = async () => {
+    setIsSharingCustomers(true);
+    try {
+      await downloadOrShareCustomersExcel(customers, activeSessionName);
+    } catch (e) {
+      console.error('Error sharing customers excel:', e);
+    } finally {
+      setIsSharingCustomers(false);
+    }
+  };
 
   const activeCustomer = customers.find((c) => c.id === activeCustomerId);
 
@@ -112,8 +128,17 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
 
         <div className="flex items-center gap-1.5">
           <button
+            onClick={handleShareCustomersExcel}
+            disabled={isSharingCustomers}
+            className="px-2 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+            title="Transfer / Bagikan Data Customer via Excel (Android Popup)"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Transfer .xlsx</span>
+          </button>
+          <button
             onClick={onOpenImportModal}
-            className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-medium transition-colors"
+            className="px-2 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-medium transition-colors"
             title="Import dari Excel"
           >
             + Excel

@@ -11,14 +11,17 @@ import {
   AlertTriangle,
   CheckSquare,
   Square,
+  Share2,
 } from 'lucide-react';
 import { Customer } from '../types';
+import { downloadOrShareCustomersExcel } from '../utils/excelUtils';
 
 interface SearchCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
   customers: Customer[];
   activeCustomerId: string | null;
+  activeSessionName?: string;
   onSelectCustomer: (customer: Customer) => void;
   onAddCustomer: (name: string, absenceNumber?: string) => void;
   onDeleteCustomer?: (id: string) => void;
@@ -31,6 +34,7 @@ export const SearchCustomerModal: React.FC<SearchCustomerModalProps> = ({
   onClose,
   customers,
   activeCustomerId,
+  activeSessionName = 'Sesi Utama',
   onSelectCustomer,
   onAddCustomer,
   onDeleteCustomer,
@@ -41,10 +45,22 @@ export const SearchCustomerModal: React.FC<SearchCustomerModalProps> = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAbsenceNumber, setNewAbsenceNumber] = useState('');
+  const [isSharing, setIsSharing] = useState(false);
 
   // Bulk Selection State
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
+
+  const handleTransferShare = async () => {
+    setIsSharing(true);
+    try {
+      await downloadOrShareCustomersExcel(customers, activeSessionName);
+    } catch (e) {
+      console.error('Error sharing customer excel:', e);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   const filteredCustomers = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -163,6 +179,16 @@ export const SearchCustomerModal: React.FC<SearchCustomerModalProps> = ({
                 <span>Hapus ({selectedCustomerIds.length})</span>
               </button>
             )}
+
+            <button
+              onClick={handleTransferShare}
+              disabled={isSharing}
+              className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow shrink-0"
+              title="Transfer Data Customer ke File Excel via Popup Android"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Transfer .xlsx</span>
+            </button>
 
             <button
               onClick={() => setShowAddForm(!showAddForm)}

@@ -731,15 +731,15 @@ export default function App() {
               <span className="hidden md:inline">Import Excel</span>
             </button>
 
-            {/* Share Rekap Excel */}
+            {/* Share Rekap / Transfer Excel */}
             <button
-              onClick={handleExportExcel}
-              disabled={isSharing || sessionPhotos.length === 0}
-              className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition-all"
-              title="Kirim / Share Hasil Rekap Foto Sesi Ini via Excel"
+              onClick={() => setIsExportShareOpen(true)}
+              disabled={isSharing}
+              className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition-all cursor-pointer"
+              title="Kirim / Share Hasil Rekap Foto & Customer via Excel (Android Popup)"
             >
               <Share2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Export Excel</span>
+              <span className="hidden sm:inline">Export / Transfer Excel</span>
             </button>
 
             {/* Settings */}
@@ -922,6 +922,7 @@ export default function App() {
             <CustomerQueue
               customers={sessionCustomers}
               activeCustomerId={activeCustomerId}
+              activeSessionName={activeSession ? activeSession.name : 'Sesi Utama'}
               onSelectCustomer={handleSelectCustomer}
               onNextCustomer={handleNextCustomer}
               onOpenImportModal={() => setIsImportOpen(true)}
@@ -938,7 +939,7 @@ export default function App() {
       {/* FOOTER */}
       <footer className="border-t border-slate-800/80 py-4 px-4 bg-slate-900/40 text-xs text-slate-500 text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© Liankhay Capture Manager — Multi Sesi & Auto Increment Foto Studio</p>
+          <p>© Liankhay Capture Manager — Multi Sesi &amp; Auto Increment Foto Studio</p>
           <div className="flex items-center gap-4 text-slate-400">
             <span>Affix Software</span>
           </div>
@@ -977,6 +978,7 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         customers={sessionCustomers}
         activeCustomerId={activeCustomerId}
+        activeSessionName={activeSession ? activeSession.name : 'Sesi Utama'}
         onSelectCustomer={handleSelectCustomer}
         onAddCustomer={handleAddCustomer}
         onDeleteCustomer={handleDeleteCustomer}
