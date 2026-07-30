@@ -29,6 +29,8 @@ interface ImportExcelModalProps {
   onClose: () => void;
   onImportCustomers: (customers: ImportedCustomer[], replaceExisting: boolean) => void;
   initialParsedData?: ImportedCustomer[] | null;
+  initialRawSheetData?: RawExcelSheetData | null;
+  initialMappingConfig?: ColumnMappingConfig | null;
   initialFileName?: string;
 }
 
@@ -47,6 +49,8 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   onClose,
   onImportCustomers,
   initialParsedData,
+  initialRawSheetData,
+  initialMappingConfig,
   initialFileName,
 }) => {
   const [rawSheetData, setRawSheetData] = useState<RawExcelSheetData | null>(null);
@@ -64,10 +68,18 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   const [replaceExisting, setReplaceExisting] = useState<boolean>(false);
   const [showWhatsAppGuide, setShowWhatsAppGuide] = useState<boolean>(false);
 
-  // Reset / Sync State when isOpen or initialParsedData changes
+  // Reset / Sync State when isOpen or initial values change
   useEffect(() => {
     if (isOpen) {
-      if (initialParsedData && initialParsedData.length > 0) {
+      if (initialRawSheetData && Array.isArray(initialRawSheetData.rawRows)) {
+        setRawSheetData(initialRawSheetData);
+        if (initialMappingConfig) {
+          setMappingConfig(initialMappingConfig);
+        } else {
+          setMappingConfig(autoDetectColumnMapping(initialRawSheetData.rawRows, initialRawSheetData.maxCols));
+        }
+        if (initialFileName) setFileName(initialFileName);
+      } else if (initialParsedData && initialParsedData.length > 0) {
         const header = ['Nomor Absen', 'Nama Customer', 'Kategori / Kelas', 'Catatan'];
         const rows = initialParsedData.map((c) => [
           String(c?.code || ''),
@@ -106,7 +118,7 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
         });
       }
     }
-  }, [isOpen, initialParsedData, initialFileName]);
+  }, [isOpen, initialParsedData, initialRawSheetData, initialMappingConfig, initialFileName]);
 
   const columnOptions = useMemo(() => {
     if (!rawSheetData || !Array.isArray(rawSheetData.rawRows)) return [];

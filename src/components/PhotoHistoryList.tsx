@@ -146,9 +146,9 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
     document.body.removeChild(a);
   };
 
-  // 10 records for front display
-  const frontDisplayPhotos = filteredPhotos.slice(0, 10);
-  const remainingCount = filteredPhotos.length - 10;
+  // Display all filtered photos in the scrollable list
+  const frontDisplayPhotos = filteredPhotos;
+  const remainingCount = 0;
 
   // Render photo rows helper function
   const renderPhotoTableRows = (photoList: PhotoRecord[], isModal: boolean = false) => {
@@ -272,12 +272,6 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
               <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono text-xs">
                 {photos.length}
               </span>
-              {markedCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center gap-1">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  <span>{markedCount} Ditandai</span>
-                </span>
-              )}
             </h3>
             <p className="text-[11px] text-slate-400">Pencatatan Nama, No. Absen, File Kamera, Tandai & Keterangan</p>
           </div>
