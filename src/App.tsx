@@ -10,8 +10,13 @@ import {
   Sparkles,
   FolderKanban,
   Plus,
-  Layers,
   Users,
+  CheckCircle2,
+  Trash2,
+  Edit2,
+  Save,
+  X,
+  Sliders,
 } from 'lucide-react';
 
 import { Customer, PhotoRecord, StudioSettings, StudioSession } from './types';
@@ -34,7 +39,14 @@ import {
   clearAllAppData,
 } from './utils/storageUtils';
 import { generateFileName, formatFileNumber } from './utils/filenameUtils';
-import { downloadOrShareExcel, parseCustomerExcel, ImportedCustomer } from './utils/excelUtils';
+import {
+  downloadOrShareExcel,
+  parseCustomerExcel,
+  extractRawExcelFromFile,
+  RawExcelSheetData,
+  ColumnMappingConfig,
+  ImportedCustomer,
+} from './utils/excelUtils';
 
 import { CaptureControl } from './components/CaptureControl';
 import { CustomerQueue } from './components/CustomerQueue';
@@ -45,6 +57,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { SessionModal } from './components/SessionModal';
 import { ExportShareModal } from './components/ExportShareModal';
 
+export type MainTabType = 'HOME' | 'CUSTOMER' | 'SESI' | 'REKAP' | 'SETTING';
+
 export default function App() {
   const [sessions, setSessions] = useState<StudioSession[]>(loadSessions);
   const [activeSessionId, setActiveSessionId] = useState<string>(loadActiveSessionId);
@@ -53,7 +67,7 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>(loadCustomers);
   const [photos, setPhotos] = useState<PhotoRecord[]>(loadPhotos);
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(loadActiveCustomerId);
-  const [activeMainTab, setActiveMainTab] = useState<'REKAP' | 'ANTRIAN'>('REKAP');
+  const [activeMainTab, setActiveMainTab] = useState<MainTabType>('HOME');
 
   // Modals state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -66,8 +80,15 @@ export default function App() {
 
   // Pending Shared Excel from WhatsApp / Share Target / Drag Drop
   const [sharedImportData, setSharedImportData] = useState<ImportedCustomer[] | null>(null);
+  const [sharedRawSheetData, setSharedRawSheetData] = useState<RawExcelSheetData | null>(null);
+  const [sharedMappingConfig, setSharedMappingConfig] = useState<ColumnMappingConfig | null>(null);
   const [sharedImportFileName, setSharedImportFileName] = useState<string>('');
   const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
+
+  // Editing session state in SESI tab
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionName, setEditSessionName] = useState<string>('');
+  const [editSessionNotes, setEditSessionNotes] = useState<string>('');
 
   // Toast Helper
   const showToast = useCallback((msg: string) => {
@@ -103,13 +124,22 @@ export default function App() {
             const file = new File([blob], 'Excel_Bagikan.xlsx', {
               type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             });
-            const customers = await parseCustomerExcel(file);
+            const extracted = await extractRawExcelFromFile(file);
             await cache.delete('/shared-excel-file');
-            if (customers.length > 0) {
-              setSharedImportData(customers);
+            if (extracted) {
+              setSharedRawSheetData(extracted.rawSheetData);
+              setSharedMappingConfig(extracted.mappingConfig);
               setSharedImportFileName('Excel_Diterima.xlsx');
               setIsImportOpen(true);
-              showToast(`⚡ File Excel dari WhatsApp berhasil diterima (${customers.length} customer)!`);
+              showToast(`⚡ File Excel dari WhatsApp/Share diterima! Siap dipreview & diimpor.`);
+            } else {
+              const customers = await parseCustomerExcel(file);
+              if (customers.length > 0) {
+                setSharedImportData(customers);
+                setSharedImportFileName('Excel_Diterima.xlsx');
+                setIsImportOpen(true);
+                showToast(`⚡ File Excel dari WhatsApp berhasil diterima (${customers.length} customer)!`);
+              }
             }
           }
         }
@@ -147,14 +177,23 @@ export default function App() {
         const file = e.dataTransfer.files[0];
         if (/\.(xlsx|xls|csv)$/i.test(file.name)) {
           try {
-            const customers = await parseCustomerExcel(file);
-            if (customers.length > 0) {
-              setSharedImportData(customers);
+            const extracted = await extractRawExcelFromFile(file);
+            if (extracted) {
+              setSharedRawSheetData(extracted.rawSheetData);
+              setSharedMappingConfig(extracted.mappingConfig);
               setSharedImportFileName(file.name);
               setIsImportOpen(true);
-              showToast(`📥 File Excel (${file.name}) dilepaskan & siap diimpor!`);
+              showToast(`📥 File Excel (${file.name}) dilepaskan! Siap dipreview & diimpor.`);
             } else {
-              showToast('⚠️ File Excel tidak memiliki data nama customer.');
+              const customers = await parseCustomerExcel(file);
+              if (customers.length > 0) {
+                setSharedImportData(customers);
+                setSharedImportFileName(file.name);
+                setIsImportOpen(true);
+                showToast(`📥 File Excel (${file.name}) dilepaskan & siap diimpor!`);
+              } else {
+                showToast('⚠️ File Excel tidak memiliki data nama customer.');
+              }
             }
           } catch (err) {
             showToast('⚠️ Gagal membaca file Excel yang dilepaskan.');
@@ -168,14 +207,23 @@ export default function App() {
         const file = e.clipboardData.files[0];
         if (/\.(xlsx|xls|csv)$/i.test(file.name)) {
           try {
-            const customers = await parseCustomerExcel(file);
-            if (customers.length > 0) {
-              setSharedImportData(customers);
+            const extracted = await extractRawExcelFromFile(file);
+            if (extracted) {
+              setSharedRawSheetData(extracted.rawSheetData);
+              setSharedMappingConfig(extracted.mappingConfig);
               setSharedImportFileName(file.name);
               setIsImportOpen(true);
-              showToast(`📥 File Excel (${file.name}) ditempel dari clipboard & siap diimpor!`);
+              showToast(`📥 File Excel (${file.name}) ditempel! Siap dipreview & diimpor.`);
             } else {
-              showToast('⚠️ File Excel tidak memiliki data nama customer.');
+              const customers = await parseCustomerExcel(file);
+              if (customers.length > 0) {
+                setSharedImportData(customers);
+                setSharedImportFileName(file.name);
+                setIsImportOpen(true);
+                showToast(`📥 File Excel (${file.name}) ditempel dari clipboard & siap diimpor!`);
+              } else {
+                showToast('⚠️ File Excel tidak memiliki data nama customer.');
+              }
             }
           } catch (err) {
             showToast('⚠️ Gagal membaca file Excel dari clipboard.');
@@ -687,238 +735,317 @@ export default function App() {
       )}
 
       {/* TOP NAVBAR */}
-      <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-2 py-2 sm:px-4 sm:py-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           {/* Logo & App Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
-              <Camera className="w-5 h-5" />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
+              <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-base sm:text-lg text-slate-100 leading-tight">
-                Liankhay Capture Manager
+              <h1 className="font-bold text-sm sm:text-base md:text-lg text-slate-100 leading-tight truncate max-w-[120px] sm:max-w-none">
+                Liankhay Capture
               </h1>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block">
                 Rekap Foto Studio • No. Absen & File Kamera
               </p>
             </div>
           </div>
 
-          {/* ACTIVE SESSION SELECTOR PILL & QUICK ACTIONS */}
-          <div className="flex items-center gap-2">
+          {/* DESKTOP MAIN NAVIGATION TABS */}
+          <div className="hidden md:flex items-center gap-1 p-1 bg-slate-950/80 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => setActiveMainTab('HOME')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === 'HOME'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Home</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMainTab('CUSTOMER')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === 'CUSTOMER'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Customer</span>
+              <span className="px-1.5 py-0.2 bg-slate-800 text-sky-400 rounded-full text-[10px]">
+                {sessionCustomers.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveMainTab('SESI')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === 'SESI'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FolderKanban className="w-3.5 h-3.5" />
+              <span>Sesi</span>
+              <span className="px-1.5 py-0.2 bg-slate-800 text-sky-400 rounded-full text-[10px]">
+                {sessions.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveMainTab('REKAP')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === 'REKAP'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Rekap</span>
+              <span className="px-1.5 py-0.2 bg-slate-800 text-sky-400 rounded-full text-[10px]">
+                {sessionPhotos.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveMainTab('SETTING')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === 'SETTING'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Setting</span>
+            </button>
+          </div>
+
+          {/* QUICK ACTIONS */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* SESSION SELECTOR PILL */}
             <button
               onClick={() => setIsSessionModalOpen(true)}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 rounded-xl text-xs font-bold text-sky-300 flex items-center gap-2 shadow-sm transition-all"
+              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 rounded-lg text-[11px] sm:text-xs font-bold text-sky-300 flex items-center gap-1.5 shadow-sm transition-all"
               title="Klik untuk Kelola / Ganti Sesi Foto"
             >
-              <FolderKanban className="w-4 h-4 text-sky-400 shrink-0" />
-              <span className="truncate max-w-[120px] sm:max-w-[200px]">
+              <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="truncate max-w-[80px] sm:max-w-[140px]">
                 {activeSession ? activeSession.name : 'Sesi Utama'}
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-[10px] hidden md:inline-block">
-                {sessions.length} Sesi
               </span>
             </button>
 
             {/* Import Excel */}
             <button
               onClick={() => setIsImportOpen(true)}
-              className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors"
               title="Import Data Customer dari Excel"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span className="hidden md:inline">Import Excel</span>
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Import</span>
             </button>
 
-            {/* Share Rekap / Transfer Excel */}
+            {/* Export / Share */}
             <button
               onClick={() => setIsExportShareOpen(true)}
               disabled={isSharing}
-              className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition-all cursor-pointer"
-              title="Kirim / Share Hasil Rekap Foto & Customer via Excel (Android Popup)"
+              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 shadow transition-all cursor-pointer"
+              title="Kirim / Share Hasil Rekap Foto & Customer via Excel"
             >
-              <Share2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Export / Transfer Excel</span>
-            </button>
-
-            {/* Settings */}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors"
-              title="Pengaturan Prefix & Format"
-            >
-              <Settings className="w-4 h-4" />
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Export</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* ACTIVE CUSTOMER QUICK STRIP BAR */}
-      <section className="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="px-2.5 py-1 rounded-full bg-sky-500/15 text-sky-300 font-semibold border border-sky-500/30 shrink-0">
-              Customer Aktif:
+      <section className="bg-slate-900/60 border-b border-slate-800 px-2 py-1.5 sm:px-4 sm:py-2">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 text-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 font-semibold border border-sky-500/30 shrink-0 text-[10px] sm:text-xs">
+              Customer:
             </span>
-            <span className="font-bold text-sm text-slate-100 truncate max-w-[180px] sm:max-w-xs">
+            <span className="font-bold text-xs sm:text-sm text-slate-100 truncate max-w-[120px] sm:max-w-xs">
               {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
             </span>
             {activeCustomer?.category && (
-              <span className="hidden md:inline px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[11px]">
+              <span className="hidden md:inline px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
                 {activeCustomer.category}
               </span>
             )}
-            <span className="text-sky-400 font-mono text-[11px]">
-              (📷 {activeCustomer ? activeCustomer.photoCount : 0} foto)
+            <span className="text-sky-400 font-mono text-[10px] sm:text-[11px]">
+              (📷 {activeCustomer ? activeCustomer.photoCount : 0})
             </span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl font-medium flex items-center gap-1.5 transition-colors"
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-1 text-[11px] transition-colors"
             >
-              <Search className="w-3.5 h-3.5 text-sky-400" />
-              <span>Cari Customer</span>
+              <Search className="w-3 h-3 text-sky-400" />
+              <span>Cari</span>
             </button>
 
             <button
               onClick={handleNextCustomer}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-xl shadow flex items-center gap-1.5 transition-all"
+              className="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-lg shadow flex items-center gap-1 text-[11px] transition-all"
             >
-              <span>Next Customer</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span>Next</span>
+              <ArrowRight className="w-3 h-3" />
             </button>
           </div>
         </div>
       </section>
 
-      {/* MAIN LAYOUT CONTAINER */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
-        {/* CAPTURE CONTROL CARD */}
-        <CaptureControl
-          onCapture={handleCapture}
-          activeCustomer={activeCustomer}
-          settings={settings}
-          onNextCustomer={handleNextCustomer}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onResetCounter={handleResetSessionCounter}
-          totalCapturedToday={sessionPhotos.length}
-        />
-
-        {/* QUICK PREFIX & FILE NUMBER CONTROL BAR FOR ACTIVE SESSION */}
-        <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="space-y-1">
-              <span className="text-slate-400 block font-medium">Prefix Sesi Ini:</span>
-              <input
-                type="text"
-                value={settings.prefix}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSettings({ ...settings, prefix: val });
-                  updateActiveSessionSettings(val, settings.currentNumber);
-                }}
-                className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-sky-400 font-bold rounded-lg w-28 focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-slate-400 block font-medium">Nomor Urut:</span>
-              <input
-                type="number"
-                min="1"
-                value={settings.currentNumber}
-                onChange={(e) => {
-                  const num = parseInt(e.target.value) || 1;
-                  setSettings({ ...settings, currentNumber: num });
-                  updateActiveSessionSettings(settings.prefix, num);
-                }}
-                className="px-3 py-1 bg-slate-800 border border-slate-700 font-mono text-slate-100 font-bold rounded-lg w-20 focus:outline-none focus:border-sky-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSessionModalOpen(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg flex items-center gap-1.5 font-medium transition-colors cursor-pointer"
-            >
-              <FolderKanban className="w-3.5 h-3.5" />
-              <span>Ganti Sesi ({sessions.length})</span>
-            </button>
-
-            <button
-              onClick={handleResetSessionCounter}
-              className="px-3 py-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-              title="Reset counter nomor sesi ke #1"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Counter</span>
-            </button>
-          </div>
-        </div>
-
-        {/* UNIFIED TABBED WRAPPER: REKAP FOTO & ANTRIAN CUSTOMER */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
-          {/* TAB HEADER BAR */}
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 flex-wrap gap-3">
-            <div className="flex items-center gap-2 p-1.5 bg-slate-950 border border-slate-800/90 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => setActiveMainTab('REKAP')}
-                className={`px-4 sm:px-6 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
-                  activeMainTab === 'REKAP'
-                    ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/25'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <Camera className="w-4 h-4" />
-                <span>Rekap Foto</span>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold ${
-                  activeMainTab === 'REKAP' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-sky-400'
-                }`}>
-                  {sessionPhotos.length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveMainTab('ANTRIAN')}
-                className={`px-4 sm:px-6 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
-                  activeMainTab === 'ANTRIAN'
-                    ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/25'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                <span>Antrian Customer</span>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold ${
-                  activeMainTab === 'ANTRIAN' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-sky-400'
-                }`}>
-                  {sessionCustomers.length}
-                </span>
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-400 font-mono">
-              Sesi Aktif: <strong className="text-sky-300 font-bold">{activeSession.name}</strong>
-            </div>
-          </div>
-
-          {/* TAB CONTENT */}
-          {activeMainTab === 'REKAP' ? (
-            <PhotoHistoryList
-              photos={sessionPhotos}
-              onDeletePhoto={handleDeletePhoto}
-              onDeleteAllPhotos={handleDeleteAllSessionPhotos}
-              onUpdatePhoto={handleUpdatePhoto}
-              onExportExcel={handleExportExcel}
-              isSharing={isSharing}
+      {/* MAIN CONTENT VIEWS */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-6 pb-24 sm:pb-8">
+        {/* 1. HOME VIEW */}
+        {activeMainTab === 'HOME' && (
+          <div className="space-y-3 sm:space-y-6">
+            {/* CAPTURE CONTROL CARD (MODUL CAPTURE DITAMPILKAN DI HOME SAJA) */}
+            <CaptureControl
+              onCapture={handleCapture}
+              activeCustomer={activeCustomer}
+              settings={settings}
+              onNextCustomer={handleNextCustomer}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onResetCounter={handleResetSessionCounter}
+              totalCapturedToday={sessionPhotos.length}
             />
-          ) : (
+
+            {/* QUICK PREFIX & FILE NUMBER CONTROL BAR */}
+            <div className="p-2.5 sm:p-4 bg-slate-900/80 border border-slate-800 rounded-xl sm:rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block font-medium text-[10px] sm:text-xs">Prefix Sesi:</span>
+                  <input
+                    type="text"
+                    value={settings.prefix}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSettings({ ...settings, prefix: val });
+                      updateActiveSessionSettings(val, settings.currentNumber);
+                    }}
+                    className="px-2 py-1 bg-slate-800 border border-slate-700 font-mono text-sky-400 font-bold rounded-lg w-20 sm:w-28 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block font-medium text-[10px] sm:text-xs">Nomor Urut:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={settings.currentNumber}
+                    onChange={(e) => {
+                      const num = parseInt(e.target.value) || 1;
+                      setSettings({ ...settings, currentNumber: num });
+                      updateActiveSessionSettings(settings.prefix, num);
+                    }}
+                    className="px-2 py-1 bg-slate-800 border border-slate-700 font-mono text-slate-100 font-bold rounded-lg w-16 sm:w-20 focus:outline-none focus:border-sky-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setActiveMainTab('SESI')}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg flex items-center gap-1 font-medium transition-colors cursor-pointer text-xs"
+                >
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  <span>Sesi ({sessions.length})</span>
+                </button>
+
+                <button
+                  onClick={handleResetSessionCounter}
+                  className="px-2 py-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition-colors cursor-pointer text-xs"
+                  title="Reset counter nomor sesi ke #1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* HOME OVERVIEW HIGHLIGHT CARDS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {/* Customer Queue Quick Card */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <span className="font-bold text-slate-100 text-xs">Customer Sesi Ini</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveMainTab('CUSTOMER')}
+                    className="text-xs text-sky-400 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <span>Lihat Semua ({sessionCustomers.length})</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Sedang Difoto:</span>
+                    <span className="font-bold text-sky-300 text-sm">
+                      {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleNextCustomer}
+                    className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-xs"
+                  >
+                    Customer Berikutnya
+                  </button>
+                </div>
+              </div>
+
+              {/* Rekap Photo Quick Card */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <span className="font-bold text-slate-100 text-xs">Hasil Rekap Foto</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveMainTab('REKAP')}
+                    className="text-xs text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <span>Buka Rekap ({sessionPhotos.length})</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Total Foto Sesi:</span>
+                    <span className="font-bold text-emerald-300 text-sm">{sessionPhotos.length} Foto Tersimpan</span>
+                  </div>
+                  <button
+                    onClick={handleExportExcel}
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs"
+                  >
+                    Export Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. CUSTOMER TAB (LIST CUSTOMER) */}
+        {activeMainTab === 'CUSTOMER' && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl">
             <CustomerQueue
               customers={sessionCustomers}
               activeCustomerId={activeCustomerId}
@@ -932,9 +1059,353 @@ export default function App() {
               onDeleteMultipleCustomers={handleDeleteMultipleCustomers}
               onDeleteAllCustomers={handleDeleteAllCustomers}
             />
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* 3. SESI TAB (LIST SESI FOTO) */}
+        {activeMainTab === 'SESI' && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-800">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <FolderKanban className="w-5 h-5 text-sky-400" />
+                  <span>Daftar &amp; Manajemen Sesi Foto Studio</span>
+                </h2>
+                <p className="text-xs text-slate-400">Total {sessions.length} sesi foto tersimpan di aplikasi</p>
+              </div>
+              <button
+                onClick={() => setIsSessionModalOpen(true)}
+                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Buat Sesi Baru</span>
+              </button>
+            </div>
+
+            {/* List of Sessions */}
+            <div className="grid grid-cols-1 gap-3">
+              {sessions.map((session) => {
+                const isCurrent = session.id === activeSessionId;
+                const isEditing = editingSessionId === session.id;
+                const custCount = customers.filter((c) => c.sessionId === session.id).length;
+                const photoCount = photos.filter((p) => p.sessionId === session.id).length;
+
+                return (
+                  <div
+                    key={session.id}
+                    className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                      isCurrent
+                        ? 'bg-sky-950/40 border-sky-500/50 shadow-md shadow-sky-500/10'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editSessionName}
+                            onChange={(e) => setEditSessionName(e.target.value)}
+                            className="px-2 py-1 bg-slate-900 border border-sky-500 rounded text-xs font-bold text-slate-100"
+                          />
+                        ) : (
+                          <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                            {session.name}
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full bg-sky-500 text-slate-950 font-extrabold text-[10px] flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                SEDANG AKTIF
+                              </span>
+                            )}
+                          </h3>
+                        )}
+
+                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 font-mono text-[10px] rounded border border-slate-700">
+                          Prefix: <strong className="text-sky-400">{session.prefix || 'STUDIO_'}</strong>
+                        </span>
+
+                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 font-mono text-[10px] rounded border border-slate-700">
+                          No: <strong className="text-amber-300">#{formatFileNumber(session.currentNumber || 1, settings.digits)}</strong>
+                        </span>
+                      </div>
+
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editSessionNotes}
+                          onChange={(e) => setEditSessionNotes(e.target.value)}
+                          placeholder="Catatan sesi..."
+                          className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-300 w-full max-w-sm mt-1"
+                        />
+                      ) : (
+                        <p className="text-xs text-slate-400">
+                          {session.notes ? session.notes : `Dibuat: ${session.date}`} • {custCount} Customer • {photoCount} Foto
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              if (editSessionName.trim()) {
+                                handleUpdateSession(session.id, { name: editSessionName, notes: editSessionNotes });
+                                setEditingSessionId(null);
+                              }
+                            }}
+                            className="p-1.5 bg-emerald-500 text-slate-950 rounded-lg font-bold text-xs flex items-center gap-1"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Simpan</span>
+                          </button>
+                          <button
+                            onClick={() => setEditingSessionId(null)}
+                            className="p-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {!isCurrent && (
+                            <button
+                              onClick={() => {
+                                handleSelectSession(session.id);
+                                showToast(`Dipilih sesi: ${session.name}`);
+                              }}
+                              className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Pilih Sesi Ini
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setEditingSessionId(session.id);
+                              setEditSessionName(session.name);
+                              setEditSessionNotes(session.notes || '');
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                            title="Edit Sesi"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {sessions.length > 1 && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Hapus sesi "${session.name}" beserta datanya?`)) {
+                                  handleDeleteSession(session.id);
+                                }
+                              }}
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors"
+                              title="Hapus Sesi"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 4. REKAP TAB (LIST REKAP FOTO) */}
+        {activeMainTab === 'REKAP' && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl">
+            <PhotoHistoryList
+              photos={sessionPhotos}
+              onDeletePhoto={handleDeletePhoto}
+              onDeleteAllPhotos={handleDeleteAllSessionPhotos}
+              onUpdatePhoto={handleUpdatePhoto}
+              onExportExcel={handleExportExcel}
+              isSharing={isSharing}
+            />
+          </div>
+        )}
+
+        {/* 5. SETTING TAB (PENGATURAN & RESET DATA) */}
+        {activeMainTab === 'SETTING' && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-sky-400" />
+                  <span>Pengaturan &amp; Reset Aplikasi</span>
+                </h2>
+                <p className="text-xs text-slate-400">Konfigurasi prefix, format nomor file, dan reset data</p>
+              </div>
+            </div>
+
+            {/* Prefix & Digit settings */}
+            <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl space-y-4">
+              <span className="font-bold text-xs text-sky-300 block">Prefix &amp; Format File Foto</span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Prefix Sesi Foto:</label>
+                  <input
+                    type="text"
+                    value={settings.prefix}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSettings({ ...settings, prefix: val });
+                      updateActiveSessionSettings(val, settings.currentNumber);
+                    }}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-mono font-bold focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Digit Nomor Urut (Digit Zero Padding):</label>
+                  <select
+                    value={settings.digits}
+                    onChange={(e) => setSettings({ ...settings, digits: parseInt(e.target.value) || 3 })}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-sky-500"
+                  >
+                    <option value={2}>2 Digit (01, 02, 03...)</option>
+                    <option value={3}>3 Digit (001, 002, 003...)</option>
+                    <option value={4}>4 Digit (0001, 0002, 0003...)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Sample preview */}
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-1">
+                <span className="text-slate-400 block font-semibold text-[11px]">Contoh Format Nama File Generasi:</span>
+                <span className="font-mono text-emerald-400 font-bold block">
+                  {generateFileName(
+                    settings,
+                    activeCustomer ? activeCustomer.name : 'Customer_Studio'
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {/* RESET DATA SECTION */}
+            <div className="p-4 bg-rose-950/20 border border-rose-500/30 rounded-2xl space-y-3">
+              <span className="font-bold text-xs text-rose-300 block flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                Reset Data &amp; Bersihkan Aplikasi
+              </span>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  onClick={() => handleResetSessionCounter(1)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Reset Counter ke #1</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (confirm('Hapus seluruh rekap foto di sesi aktif ini?')) {
+                      handleDeleteAllSessionPhotos();
+                    }
+                  }}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-xl text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Hapus Foto Sesi Ini</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (confirm('Hapus seluruh daftar customer di sesi aktif ini?')) {
+                      handleDeleteAllCustomers();
+                    }
+                  }}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-xl text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Hapus Customer Sesi Ini</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (confirm('⚠️ PERINGATAN: Yakin ingin MENGHAPUS SEMUA DATA aplikasi (semua sesi, customer, dan foto)? Data yang dihapus tidak bisa dikembalikan.')) {
+                      handleResetAllData();
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-xl text-xs shadow-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>RESET TOTAL SEMUA DATA APLIKASI</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 border-t border-slate-800/90 backdrop-blur-xl px-1 py-1.5 flex items-center justify-around shadow-2xl sm:hidden">
+        {/* Home: modul capture */}
+        <button
+          onClick={() => {
+            setActiveMainTab('HOME');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeMainTab === 'HOME' ? 'text-sky-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Camera className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 tracking-tight">Home</span>
+        </button>
+
+        {/* Customer */}
+        <button
+          onClick={() => {
+            setActiveMainTab('CUSTOMER');
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeMainTab === 'CUSTOMER' ? 'text-sky-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 tracking-tight">Customer</span>
+        </button>
+
+        {/* Sesi */}
+        <button
+          onClick={() => setActiveMainTab('SESI')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeMainTab === 'SESI' ? 'text-sky-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FolderKanban className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 tracking-tight">Sesi</span>
+        </button>
+
+        {/* Rekap */}
+        <button
+          onClick={() => setActiveMainTab('REKAP')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeMainTab === 'REKAP' ? 'text-sky-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FileSpreadsheet className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 tracking-tight">Rekap</span>
+        </button>
+
+        {/* Setting */}
+        <button
+          onClick={() => setActiveMainTab('SETTING')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeMainTab === 'SETTING' ? 'text-sky-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 tracking-tight">Setting</span>
+        </button>
+      </nav>
 
       {/* FOOTER */}
       <footer className="border-t border-slate-800/80 py-4 px-4 bg-slate-900/40 text-xs text-slate-500 text-center">
@@ -945,19 +1416,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-
-      {/* DRAG & DROP OVERLAY FOR EXCEL FILES (e.g. from WhatsApp Desktop) */}
-      {isDraggingFile && (
-        <div className="fixed inset-0 z-50 bg-sky-950/90 backdrop-blur-md border-4 border-dashed border-sky-400 flex flex-col items-center justify-center p-6 text-center animate-fade-in pointer-events-none">
-          <div className="w-20 h-20 rounded-2xl bg-sky-500/20 border border-sky-400 flex items-center justify-center text-sky-300 mb-4 animate-bounce">
-            <FileSpreadsheet className="w-10 h-10" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Lepaskan File Excel di Sini</h2>
-          <p className="text-sm text-sky-200 max-w-md">
-            File Excel dari WhatsApp / Laptop akan langsung diimpor ke antrean customer studio.
-          </p>
-        </div>
-      )}
 
       {/* MODALS */}
       <SessionModal
@@ -991,10 +1449,14 @@ export default function App() {
         onClose={() => {
           setIsImportOpen(false);
           setSharedImportData(null);
+          setSharedRawSheetData(null);
+          setSharedMappingConfig(null);
           setSharedImportFileName('');
         }}
         onImportCustomers={handleImportCustomers}
         initialParsedData={sharedImportData}
+        initialRawSheetData={sharedRawSheetData}
+        initialMappingConfig={sharedMappingConfig}
         initialFileName={sharedImportFileName}
       />
 

@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">LK Pasfoto</string>
-    <string name="title_activity_main">LK Pasfoto</string>
-    <string name="package_name">com.lkpassfoto.app</string>
-    <string name="custom_url_scheme">com.lkpassfoto.app</string>
-</resources>

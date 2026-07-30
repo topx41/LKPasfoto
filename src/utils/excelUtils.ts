@@ -185,6 +185,31 @@ export function parseArrayBufferExcel(data: ArrayBuffer | Uint8Array): ImportedC
   return result.validCustomers;
 }
 
+export async function extractRawExcelFromFile(
+  file: File
+): Promise<{ rawSheetData: RawExcelSheetData; mappingConfig: ColumnMappingConfig } | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        if (!e.target?.result) {
+          resolve(null);
+          return;
+        }
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        const rawSheetData = extractRawExcelData(data);
+        const mappingConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
+        resolve({ rawSheetData, mappingConfig });
+      } catch (err) {
+        console.error('Failed to extract raw excel:', err);
+        resolve(null);
+      }
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 export async function parseCustomerExcel(file: File): Promise<ImportedCustomer[]> {
   return new Promise((resolve) => {
     const reader = new FileReader();
