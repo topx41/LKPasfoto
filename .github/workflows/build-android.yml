@@ -15,11 +15,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Setup Node.js (Gunakan Node 20 LTS agar stabil)
+      # Setup Node.js (Node 22 required by Capacitor 7 CLI)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       # Install dependencies
