@@ -160,6 +160,33 @@ export default function App() {
 
     const checkPendingSharedImport = async () => {
       try {
+        // 0. Check inlined server payload injected directly into window.__INITIAL_SHARED_DATA__ on POST /share-target
+        const initialSharedData = (window as any).__INITIAL_SHARED_DATA__;
+        if (initialSharedData) {
+          try {
+            delete (window as any).__INITIAL_SHARED_DATA__;
+            localStorage.removeItem('foto_studio_pending_import_id');
+            const sheetData = initialSharedData.rawSheetData || {
+              sheetName: 'File_Share_Diterima',
+              rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
+              maxCols: 4,
+            };
+            const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
+            setSharedRawSheetData(sheetData);
+            setSharedMappingConfig(autoConfig);
+            setSharedImportFileName(initialSharedData.fileName || 'Excel_Share_Sheet.xlsx');
+            if (Array.isArray(initialSharedData.customers) && initialSharedData.customers.length > 0) {
+              setSharedImportData(initialSharedData.customers);
+            }
+            setIsImportOpen(true);
+            showToast(`⚡ Data Excel (${initialSharedData.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            return;
+          } catch (initErr) {
+            console.error('Error reading window.__INITIAL_SHARED_DATA__:', initErr);
+          }
+        }
+
         // 1. Check server pending import ID via URL query or localStorage
         const urlParams = new URLSearchParams(window.location.search);
         const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id');

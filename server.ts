@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { createServer as createViteServer } from "vite";
@@ -24,6 +25,7 @@ function cleanupTempImports() {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  let viteInstance: any = null;
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -180,14 +182,17 @@ async function startServer() {
         };
       }
 
-      // Generate unique token for this share import
+      // Store payload for GET fallback
       const tempId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      tempImportStore.set(tempId, {
+      const sharedPayload = {
         rawSheetData,
         fileName,
         customers: parsedCustomers,
+        tempId,
         timestamp: Date.now(),
-      });
+      };
+
+      tempImportStore.set(tempId, sharedPayload);
 
       if (req.headers.accept?.includes('application/json') || req.xhr) {
         return res.json({
@@ -199,67 +204,11 @@ async function startServer() {
         });
       }
 
-      // HTML Response that sets pending import ID and redirects to app
-      res.status(200).send(`
-        <!DOCTYPE html>
-        <html lang="id">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Menerima File Excel...</title>
-          <style>
-            body { background: #020617; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center; }
-            .card { background: #0f172a; border: 1px solid #0284c7; padding: 28px; border-radius: 20px; max-width: 420px; box-shadow: 0 25px 50px -12px rgba(14, 165, 233, 0.25); }
-            .spinner { width: 40px; height: 40px; border: 4px solid #1e293b; border-top: 4px solid #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px auto; }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-            h2 { font-size: 18px; margin: 0 0 8px 0; color: #38bdf8; }
-            p { font-size: 13px; color: #94a3b8; margin: 0; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <div class="spinner"></div>
-            <h2>⚡ Data Excel Diterima!</h2>
-            <p>Membuka preview & mapping kolom customer di Liankhay Capture Manager...</p>
-          </div>
-          <script>
-            const tempId = ${JSON.stringify(tempId)};
-            try {
-              localStorage.setItem('foto_studio_pending_import_id', tempId);
-            } catch(e) {
-              console.error('Local storage write error:', e);
-            }
-            setTimeout(() => {
-              window.location.replace('/?shared_import_id=' + tempId + '&t=' + Date.now());
-            }, 150);
-          </script>
-        </body>
-        </html>
-      `);
+      // Render full HTML app directly into the Share Target activity response (no redirects!)
+      return renderAppWithSharedData(req, res, sharedPayload);
     } catch (err: any) {
       console.error("Share target processing error:", err);
-      res.status(500).send(`
-        <!DOCTYPE html>
-        <html lang="id">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Gagal Memproses File</title>
-          <style>
-            body { background: #020617; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center; }
-            .card { background: #0f172a; border: 1px solid #e11d48; padding: 24px; border-radius: 16px; max-width: 400px; }
-            a { color: #38bdf8; font-weight: bold; text-decoration: none; display: inline-block; margin-top: 16px; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h2>❌ Gagal Mengimpor Excel</h2>
-            <p>${err.message || "Format file tidak didukung."}</p>
-            <a href="/">Kembali ke Aplikasi Studio</a>
-          </div>
-        </body>
-        </html>
-      `);
+      return res.redirect(303, "/?share_error=true");
     }
   };
 
@@ -267,13 +216,41 @@ async function startServer() {
   app.post("/share-target", upload.any(), handleShareTargetRequest);
   app.post("/", upload.any(), handleShareTargetRequest);
 
+  // Helper to serve index.html with inlined shared data
+  async function renderAppWithSharedData(req: express.Request, res: express.Response, sharedPayload: any) {
+    try {
+      const indexPath = process.env.NODE_ENV !== "production"
+        ? path.join(process.cwd(), "index.html")
+        : path.join(process.cwd(), "dist", "index.html");
+
+      let html = fs.readFileSync(indexPath, "utf-8");
+
+      if (viteInstance) {
+        html = await viteInstance.transformIndexHtml(req.originalUrl || "/", html);
+      }
+
+      const payloadScript = `<script>
+        window.__INITIAL_SHARED_DATA__ = ${JSON.stringify(sharedPayload)};
+        try {
+          localStorage.setItem('foto_studio_pending_import_id', ${JSON.stringify(sharedPayload.tempId)});
+        } catch(e) {}
+      </script>`;
+
+      html = html.replace("</head>", `${payloadScript}\n</head>`);
+      return res.status(200).set("Content-Type", "text/html").send(html);
+    } catch (renderErr) {
+      console.error("Error serving index.html for share target:", renderErr);
+      return res.redirect(303, `/?shared_import_id=${sharedPayload.tempId}&t=${Date.now()}`);
+    }
+  }
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    viteInstance = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
-    app.use(vite.middlewares);
+    app.use(viteInstance.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
