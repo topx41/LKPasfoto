@@ -67,6 +67,72 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [replaceExisting, setReplaceExisting] = useState<boolean>(false);
   const [showWhatsAppGuide, setShowWhatsAppGuide] = useState<boolean>(false);
+  const [importMethod, setImportMethod] = useState<'FILE' | 'PASTE'>('FILE');
+  const [pastedText, setPastedText] = useState<string>('');
+
+  // Process pasted text into raw rows
+  const handleProcessPastedText = () => {
+    if (!pastedText.trim()) return;
+    const lines = pastedText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+
+    const parsedRows: string[][] = [];
+
+    lines.forEach((line) => {
+      // 1. If tab separated (e.g. copied from Excel/Sheets)
+      if (line.includes('\t')) {
+        const parts = line.split('\t').map((p) => p.trim());
+        parsedRows.push(parts);
+        return;
+      }
+
+      // 2. If comma or semicolon separated (CSV)
+      if (line.includes(';') || (line.includes(',') && !/^[\d\s.,-]+$/.test(line))) {
+        const sep = line.includes(';') ? ';' : ',';
+        const parts = line.split(sep).map((p) => p.trim());
+        parsedRows.push(parts);
+        return;
+      }
+
+      // 3. Numbered list format (e.g., "1. Budi Santoso", "02 - Ani Wijaya", "10 | Denny")
+      const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+      if (numMatch && numMatch[2].trim()) {
+        const code = numMatch[1].trim();
+        const rest = numMatch[2].trim();
+        // Check if rest has additional category/notes in brackets or dash
+        let name = rest;
+        let notes = '';
+        if (rest.includes('-')) {
+          const nameParts = rest.split('-');
+          name = nameParts[0].trim();
+          notes = nameParts.slice(1).join('-').trim();
+        }
+        parsedRows.push([code, name, '', notes]);
+      } else {
+        // Plain text line
+        parsedRows.push(['', line, '', '']);
+      }
+    });
+
+    const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
+    const maxCols = Math.max(4, ...parsedRows.map((r) => r.length));
+    const synthesizedRows = [header, ...parsedRows];
+
+    setRawSheetData({
+      sheetName: 'Tempel_Teks',
+      rawRows: synthesizedRows,
+      maxCols,
+    });
+    setMappingConfig({
+      startRow: 2,
+      headerRow: 1,
+      absenColIndex: 0,
+      nameColIndex: 1,
+      categoryColIndex: 2,
+      notesColIndex: 3,
+    });
+    setFileName('Hasil Tempel Teks WA');
+  };
 
   // Reset / Sync State when isOpen or initial values change
   useEffect(() => {
@@ -242,28 +308,82 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
             )}
           </div>
 
-          {/* File Picker / Upload Box */}
-          <div className="relative border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-4 text-center transition-all bg-slate-950/40 group">
-            <input
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleFileChange}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-            />
-            <div className="flex items-center justify-center gap-3">
-              <div className="p-2 bg-slate-800 rounded-lg text-emerald-400">
-                <Upload className="w-5 h-5" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-slate-200">
-                  {fileName ? fileName : 'Klik atau Drag & Drop file Excel ke sini'}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Mendukung format .xlsx, .xls, .csv dari WhatsApp & File Manager
-                </p>
+          {/* Method Selection Tabs */}
+          <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+            <button
+              onClick={() => setImportMethod('FILE')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                importMethod === 'FILE'
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/10'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>1. Upload File Excel (.xlsx / .csv)</span>
+            </button>
+            <button
+              onClick={() => setImportMethod('PASTE')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                importMethod === 'PASTE'
+                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/10'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>2. Tempel / Paste Teks (Dari WA / Catatan)</span>
+            </button>
+          </div>
+
+          {importMethod === 'FILE' ? (
+            /* File Picker / Upload Box */
+            <div className="relative border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-4 text-center transition-all bg-slate-950/40 group">
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleFileChange}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+              />
+              <div className="flex items-center justify-center gap-3">
+                <div className="p-2 bg-slate-800 rounded-lg text-emerald-400">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-200">
+                    {fileName ? fileName : 'Klik atau Drag & Drop file Excel ke sini'}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Mendukung format .xlsx, .xls, .csv dari WhatsApp &amp; File Manager
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Paste Text Input Box */
+            <div className="space-y-2.5 p-3.5 bg-slate-950/80 border border-sky-500/30 rounded-xl">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-sky-400 text-xs flex items-center gap-1.5">
+                  <FileText className="w-4 h-4" />
+                  Tempel Teks Daftar Nama / Absen (Copy dari WA / Notes):
+                </label>
+                <span className="text-[10px] text-slate-400">Format otomatis terdeteksi</span>
+              </div>
+              <textarea
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                placeholder="Contoh format yang bisa di-paste:&#10;1. Budi Santoso&#10;2. Ani Wijaya&#10;3. Denny - Kategori A&#10;atau salin baris tabel dari WhatsApp / Excel..."
+                rows={5}
+                className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500 placeholder:text-slate-500"
+              />
+              <button
+                onClick={handleProcessPastedText}
+                disabled={!pastedText.trim()}
+                className="w-full py-2.5 bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-sky-500/10"
+              >
+                <FileCheck2 className="w-4 h-4" />
+                <span>Proses Teks &amp; Tampilkan Preview Customer</span>
+              </button>
+            </div>
+          )}
 
           {isLoading && (
             <div className="py-6 text-center text-slate-400 text-sm animate-pulse flex justify-center items-center gap-2">

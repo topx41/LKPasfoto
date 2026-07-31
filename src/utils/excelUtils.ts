@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Customer, PhotoRecord } from '../types';
+import { shareFileNative } from './nativeShareHelper';
 
 export interface ImportedCustomer {
   name: string;
@@ -390,19 +391,14 @@ export async function downloadOrShareCustomersExcel(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: `Transfer Data Customer - ${sessionName}`,
-        text: `File Excel Data Customer (${customers.length} customer) Sesi ${sessionName} untuk Transfer Data.`,
-      });
-      return { method: 'share', success: true };
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return { method: 'share', success: false };
-      }
-    }
+  const shared = await shareFileNative(
+    file,
+    `Transfer Data Customer - ${sessionName}`,
+    `File Excel Data Customer (${customers.length} customer) Sesi ${sessionName} untuk Transfer Data.`
+  );
+
+  if (shared) {
+    return { method: 'share', success: true };
   }
 
   const url = URL.createObjectURL(blob);
@@ -441,19 +437,14 @@ export async function downloadOrShareExcel(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
-  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: `Rekap Foto - ${sessionName}`,
-        text: `Rekap foto studio ${sessionName} (${sessionDate}). Total foto: ${photos.length}.`,
-      });
-      return { method: 'share', success: true };
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return { method: 'share', success: false };
-      }
-    }
+  const shared = await shareFileNative(
+    file,
+    `Rekap Foto - ${sessionName}`,
+    `Rekap foto studio ${sessionName} (${sessionDate}). Total foto: ${photos.length}.`
+  );
+
+  if (shared) {
+    return { method: 'share', success: true };
   }
 
   const url = URL.createObjectURL(blob);

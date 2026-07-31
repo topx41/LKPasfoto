@@ -55,6 +55,39 @@ jobs:
             echo "Folder android belum ada, membuat platform android dengan Capacitor..."
             npx cap add android
           fi
+
+          # Inject Intent Filter into AndroidManifest.xml so app appears in Android Share Sheet
+          MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
+            echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
+            node -e '
+              const fs = require("fs");
+              const manifestPath = "android/app/src/main/AndroidManifest.xml";
+              if (fs.existsSync(manifestPath)) {
+                let content = fs.readFileSync(manifestPath, "utf-8");
+                if (!content.includes("android.intent.action.SEND")) {
+                  const shareIntent = `
+            <!-- Register app in Android System Share Sheet for Excel & CSV Files -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/excel" />
+                <data android:mimeType="*/*" />
+            </intent-filter>`;
+                  content = content.replace("</activity>", shareIntent + "\n        </activity>");
+                  fs.writeFileSync(manifestPath, content, "utf-8");
+                  console.log("Successfully injected Share Intent Filter!");
+                }
+              }
+            '
+          fi
+
           echo "Melakukan sync file web ke project Android..."
           npx cap sync android
 

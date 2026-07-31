@@ -18,6 +18,7 @@ import {
   generateCustomerExcelWorkbook,
   downloadOrShareCustomersExcel,
 } from '../utils/excelUtils';
+import { shareFileNative, shareTextNative, isCapacitorNative } from '../utils/nativeShareHelper';
 
 interface ExportShareModalProps {
   isOpen: boolean;
@@ -91,34 +92,14 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     setIsSharingNative(true);
     try {
       const file = getExcelFile();
+      const success = await shareFileNative(
+        file,
+        `Rekap Foto Studio - ${activeSession.name}`,
+        summaryText
+      );
 
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: `Rekap Foto Studio - ${activeSession.name}`,
-            text: summaryText,
-          });
-          return;
-        } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') return;
-          console.log('Direct file sharing error, falling back:', shareErr);
-        }
-      }
-
-      handleDirectDownload();
-
-      if (typeof navigator !== 'undefined' && navigator.share) {
-        try {
-          await navigator.share({
-            title: `Rekap Foto Studio - ${activeSession.name}`,
-            text: `${summaryText}\n\n📁 File Excel (${fileName}) telah diunduh. Silakan lampirkan file Excel ini.`,
-          });
-        } catch (textShareErr: any) {
-          if (textShareErr.name !== 'AbortError') console.log('Text share error:', textShareErr);
-        }
-      } else {
-        alert(`File Excel (${fileName}) telah diunduh ke folder Download HP/Laptop Anda.`);
+      if (!success) {
+        handleDirectDownload();
       }
     } catch (err: any) {
       console.error('Share process error:', err);
@@ -183,7 +164,64 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isWebShareSupported = typeof navigator !== 'undefined' && Boolean(navigator.share);
+  const [copiedTable, setCopiedTable] = useState(false);
+
+  // Helper to build TSV table
+  const getTSVTable = () => {
+    const lines = ['No Absen\tNama Customer\tFile Foto\tKategori\tCatatan'];
+    if (customers.length > 0) {
+      customers.forEach((c) => {
+        const custPhotos = photos
+          .filter((p) => p.customerId === c.id || (p.code && p.code.toLowerCase() === (c.code || '').toLowerCase()))
+          .map((p) => p.filename)
+          .join(', ');
+        lines.push(`${c.code || '-'}\t${c.name}\t${custPhotos || '-'}\t${c.category || '-'}\t${c.notes || '-'}`);
+      });
+    } else {
+      photos.forEach((p, idx) => {
+        lines.push(`${p.code || idx + 1}\t${p.customerName || '-'}\t${p.filename}\t-\t${p.notes || '-'}`);
+      });
+    }
+    return lines.join('\n');
+  };
+
+  const handleCopyTableTSV = () => {
+    const tsv = getTSVTable();
+    navigator.clipboard.writeText(tsv);
+    setCopiedTable(true);
+    setTimeout(() => setCopiedTable(false), 2000);
+  };
+
+  // Helper to build formatted WhatsApp List Text
+  const getWhatsAppListText = () => {
+    let text = `${summaryText}\n*DAFTAR CUSTOMER & FILE FOTO:*\n`;
+    if (customers.length > 0) {
+      customers.forEach((c, i) => {
+        const custPhotos = photos
+          .filter((p) => p.customerId === c.id || (p.code && p.code.toLowerCase() === (c.code || '').toLowerCase()))
+          .map((p) => p.filename)
+          .join(', ');
+        text += `${i + 1}. *${c.name}* (${c.code ? `#${c.code}` : 'No Absen -'}) ${custPhotos ? `➔ Foto: ${custPhotos}` : ''} ${c.notes ? `[${c.notes}]` : ''}\n`;
+      });
+    } else {
+      photos.forEach((p, i) => {
+        text += `${i + 1}. *${p.filename}* ➔ ${p.customerName || 'Tanpa Nama'} (${p.code ? `#${p.code}` : ''})\n`;
+      });
+    }
+    return text;
+  };
+
+  // Share formatted list text to WhatsApp / Native Share Sheet
+  const handleWhatsAppShareList = async () => {
+    const text = getWhatsAppListText();
+    navigator.clipboard.writeText(text);
+
+    const shared = await shareTextNative(`Rekap Foto - ${activeSession.name}`, text, 'Bagikan Rekap ke WhatsApp');
+    if (!shared) {
+      const encoded = encodeURIComponent(text);
+      window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
@@ -208,7 +246,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[82vh] overflow-y-auto text-xs">
           {/* File Card Preview */}
           <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -218,125 +256,119 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
               <div className="overflow-hidden">
                 <p className="text-xs font-bold text-slate-200 truncate">{fileName}</p>
                 <p className="text-[11px] text-slate-400">
-                  {photos.length} foto &bull; {customers.length} customer &bull; Sheet Rekap + Daftar
+                  {photos.length} foto &bull; {customers.length} customer &bull; Sheet Rekap &amp; Tabel
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Action 1: Share Rekap Data Excel via Native Android Popup */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              1. Export Rekap Data Foto &amp; Customer (.xlsx)
-            </label>
             <button
-              onClick={handleNativeShare}
-              disabled={isSharingNative}
-              className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              onClick={handleDirectDownload}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1 shrink-0 cursor-pointer"
             >
-              <Smartphone className="w-4 h-4" />
-              <span>
-                {isWebShareSupported
-                  ? 'Buka Popup Share Android (Quick Share, WA, Drive, dll)'
-                  : 'Unduh & Bagikan Rekap Excel'}
-              </span>
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              <Download className="w-3.5 h-3.5" />
+              <span>.XLSX</span>
             </button>
           </div>
 
-          {/* Action 2: Transfer Data Customer Excel via Native Android Popup */}
+          {/* SOLUSI 1: KIRIM TEKS REKAP LANGSUNG KE WHATSAPP (PALING PRAKTIS) */}
+          <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-400 flex items-center gap-1.5 text-xs">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                Solusi 1: Kirim Teks Rekap Rapi ke WhatsApp (Tanpa File)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                Rekomendasi
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Penerima di WhatsApp bisa langsung membaca daftar nama customer, nomor absen, dan nama file foto tanpa perlu download/buka file Excel!
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={handleWhatsAppShareList}
+                className="py-2.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-500/10"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Kirim Daftar ke WhatsApp</span>
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </button>
+
+              <button
+                onClick={handleCopyTableTSV}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold border border-slate-700 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                {copiedTable ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">Tabel Tersalin!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-sky-400" />
+                    <span>Salin Tabel (Paste ke Excel)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* SOLUSI 2: EXPORT & BAGIKAN FILE EXCEL (.XLSX) */}
           <div className="space-y-2 pt-1">
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              2. Transfer In / Transfer Out Data Customer (.xlsx)
+              Solusi 2: Export &amp; Bagikan File Excel (.XLSX)
             </label>
-            <button
-              onClick={handleShareCustomersNative}
-              disabled={isSharingNative}
-              className="w-full py-3 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
-            >
-              <Users className="w-4 h-4" />
-              <span>
-                Transfer / Bagikan Data Customer ({customers.length} Orang)
-              </span>
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-            </button>
-            <p className="text-[10px] text-slate-500 text-center">
-              Membuka popup Share Android untuk mengirimkan file Excel khusus daftar customer.
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                onClick={handleNativeShare}
+                disabled={isSharingNative}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4 text-sky-400" />
+                <span>Bagikan Rekap (.xlsx)</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </button>
+
+              <button
+                onClick={handleShareCustomersNative}
+                disabled={isSharingNative}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Users className="w-4 h-4 text-amber-400" />
+                <span>Transfer Customer (.xlsx)</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </button>
+            </div>
+          </div>
+
+          {/* CATATAN PENTING TARGET SHARE & CAPACITOR ANDROID */}
+          <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-[11px] leading-relaxed">
+            <div className="flex items-center gap-2 text-sky-400 font-bold">
+              <Smartphone className="w-4 h-4 shrink-0" />
+              <span>Solusi Native ShareSheet Android (Capacitor Integration)</span>
+            </div>
+            <p className="text-slate-300">
+              Aplikasi ini sudah terintegrasi dengan <strong className="text-sky-300">@capacitor/share</strong>! Saat di-build menjadi APK Android Native dengan Capacitor (`npm run cap`), tombol <strong>Bagikan Rekap (.xlsx)</strong> akan otomatis memicu <strong>Native Android Share Chooser / ShareSheet</strong> resmi yang menampilkan WhatsApp, Drive, Quick Share, Gmail, dan aplikasi terinstall lainnya.
+            </p>
+            <p className="text-slate-400 pt-1 border-t border-slate-800/80">
+              💡 <strong className="text-slate-200">Di Web Browser / PWA:</strong> Gunakan <strong>Solusi 1 (Teks WA Instant)</strong> atau klik <strong>.XLSX</strong> lalu di WhatsApp pilih Lampirkan 📎 &rarr; Dokumen.
             </p>
           </div>
 
-          <div className="relative my-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-800"></div>
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase">
-              <span className="bg-slate-900 px-2 text-slate-500 font-semibold">Atau Bagikan Langsung</span>
-            </div>
-          </div>
-
-          {/* Quick Direct Integrations */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* WhatsApp */}
-            <button
-              onClick={handleWhatsAppShare}
-              className="p-3 bg-slate-800 hover:bg-emerald-950/60 hover:border-emerald-500/40 border border-slate-700/80 rounded-xl text-left space-y-1 transition-all group"
-            >
-              <div className="flex items-center justify-between text-emerald-400">
-                <MessageSquare className="w-4 h-4" />
-                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <p className="text-xs font-bold text-slate-200">WhatsApp</p>
-              <p className="text-[10px] text-slate-400">Unduh &amp; kirim pesan ringkasan ke WA</p>
-            </button>
-
-            {/* Email */}
-            <button
-              onClick={handleEmailShare}
-              className="p-3 bg-slate-800 hover:bg-sky-950/60 hover:border-sky-500/40 border border-slate-700/80 rounded-xl text-left space-y-1 transition-all group"
-            >
-              <div className="flex items-center justify-between text-sky-400">
-                <Mail className="w-4 h-4" />
-                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <p className="text-xs font-bold text-slate-200">Email (Gmail/Mail)</p>
-              <p className="text-[10px] text-slate-400">Buka aplikasi email dengan draf rekap</p>
-            </button>
-          </div>
-
-          {/* Direct Download & Copy Summary */}
-          <div className="grid grid-cols-2 gap-2.5 pt-1">
-            <button
-              onClick={handleDirectDownload}
-              className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Download className="w-4 h-4 text-emerald-400" />
-              <span>Download .XLSX</span>
-            </button>
-
-            <button
-              onClick={handleCopySummary}
-              className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              {copied ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">Tersalin!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4 text-sky-400" />
-                  <span>Salin Teks Rekap</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Summary Box Preview */}
+          {/* Preview Text Box */}
           <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Preview Ringkasan Teks:
-            </span>
-            <pre className="text-[11px] text-slate-300 font-sans whitespace-pre-wrap leading-relaxed">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Preview Teks Rekap WhatsApp:
+              </span>
+              <button
+                onClick={handleCopySummary}
+                className="text-[10px] text-sky-400 hover:underline flex items-center gap-1 font-semibold"
+              >
+                {copied ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? 'Tersalin' : 'Salin'}</span>
+              </button>
+            </div>
+            <pre className="text-[11px] text-slate-300 font-sans whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
               {summaryText}
             </pre>
           </div>
