@@ -60,7 +60,7 @@ jobs:
           MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
             echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
-            cat << 'EOF' > inject_intent.js
+            cat << 'EOF' > inject_intent.cjs
           const fs = require('fs');
           const manifestPath = 'android/app/src/main/AndroidManifest.xml';
           if (fs.existsSync(manifestPath)) {
@@ -86,8 +86,8 @@ jobs:
             }
           }
           EOF
-            node inject_intent.js
-            rm -f inject_intent.js
+            node inject_intent.cjs
+            rm -f inject_intent.cjs
           fi
 
           echo "Melakukan sync file web ke project Android..."
