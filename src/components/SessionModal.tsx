@@ -31,6 +31,7 @@ interface SessionModalProps {
   onDeleteSession: (sessionId: string) => void;
   customers: Customer[];
   photos: PhotoRecord[];
+  initialEditSessionId?: string | null;
 }
 
 export const SessionModal: React.FC<SessionModalProps> = ({
@@ -44,22 +45,35 @@ export const SessionModal: React.FC<SessionModalProps> = ({
   onDeleteSession,
   customers,
   photos,
+  initialEditSessionId = null,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(initialEditSessionId);
   const [searchQuery, setSearchQuery] = useState('');
 
   // New Session Form State
   const [newSessionName, setNewSessionName] = useState('');
   const [newSessionPrefix, setNewSessionPrefix] = useState('STUDIO_');
   const [newSessionStartNum, setNewSessionStartNum] = useState(1);
+  const [newSessionDigitCount, setNewSessionDigitCount] = useState<number>(3);
   const [newSessionNotes, setNewSessionNotes] = useState('');
   const [copyCustomers, setCopyCustomers] = useState(true);
 
   // Edit State
   const [editName, setEditName] = useState('');
   const [editPrefix, setEditPrefix] = useState('');
+  const [editDigitCount, setEditDigitCount] = useState<number>(3);
+  const [editCurrentNumber, setEditCurrentNumber] = useState<number>(1);
   const [editNotes, setEditNotes] = useState('');
+
+  React.useEffect(() => {
+    if (initialEditSessionId) {
+      const sess = sessions.find((s) => s.id === initialEditSessionId);
+      if (sess) {
+        handleStartEdit(sess);
+      }
+    }
+  }, [initialEditSessionId, sessions]);
 
   const filteredSessions = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -83,6 +97,7 @@ export const SessionModal: React.FC<SessionModalProps> = ({
     setNewSessionName(`Sesi Foto (${todayStr}) - #${sessions.length + 1}`);
     setNewSessionPrefix(`SESI${sessions.length + 1}_`);
     setNewSessionStartNum(1);
+    setNewSessionDigitCount(3);
     setNewSessionNotes('');
     setCopyCustomers(false);
     setIsCreating(true);
@@ -98,6 +113,7 @@ export const SessionModal: React.FC<SessionModalProps> = ({
         date: new Date().toISOString().split('T')[0],
         prefix: newSessionPrefix.trim() || 'STUDIO_',
         currentNumber: Math.max(1, newSessionStartNum),
+        numberDigitCount: newSessionDigitCount,
         notes: newSessionNotes.trim(),
       },
       copyCustomers ? activeSessionId : undefined
@@ -110,6 +126,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({
     setEditingSessionId(session.id);
     setEditName(session.name);
     setEditPrefix(session.prefix);
+    setEditDigitCount(session.numberDigitCount || 3);
+    setEditCurrentNumber(session.currentNumber || 1);
     setEditNotes(session.notes || '');
   };
 
@@ -118,6 +136,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({
     onUpdateSession(sessionId, {
       name: editName.trim(),
       prefix: editPrefix.trim() || 'STUDIO_',
+      numberDigitCount: editDigitCount,
+      currentNumber: Math.max(1, editCurrentNumber),
       notes: editNotes.trim(),
       updatedAt: new Date().toISOString(),
     });
@@ -223,6 +243,22 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                     onChange={(e) => setNewSessionPrefix(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl font-mono text-sky-400 font-bold focus:outline-none focus:border-sky-500"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-semibold block">
+                    Span Digit Kamera:
+                  </label>
+                  <select
+                    value={newSessionDigitCount}
+                    onChange={(e) => setNewSessionDigitCount(parseInt(e.target.value) || 3)}
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl font-mono text-amber-300 font-bold focus:outline-none focus:border-sky-500"
+                  >
+                    <option value={2}>2 Digit (cth: 01, 02)</option>
+                    <option value={3}>3 Digit (cth: 001, 002)</option>
+                    <option value={4}>4 Digit (cth: 0001, 0002)</option>
+                    <option value={5}>5 Digit (cth: 00001, 00002)</option>
+                  </select>
                 </div>
 
                 <div className="space-y-1">
@@ -345,16 +381,19 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                 >
                   {isEditingThis ? (
                     /* EDIT FORM INLINE */
-                    <div className="space-y-3 text-xs">
-                      <div className="font-bold text-sky-400">Edit Info Sesi</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
+                    <div className="space-y-3 text-xs bg-slate-900/90 p-3.5 rounded-xl border border-sky-500/30">
+                      <div className="font-bold text-sky-400 flex items-center justify-between">
+                        <span>Edit Pengaturan &amp; Keterangan Sesi</span>
+                        <span className="text-[10px] text-slate-400">Span digit &amp; prefix mengikat sesi ini</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="sm:col-span-3">
                           <label className="text-slate-400 block mb-1">Nama Sesi:</label>
                           <input
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium"
+                            className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 font-bold"
                           />
                         </div>
                         <div>
@@ -363,39 +402,63 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                             type="text"
                             value={editPrefix}
                             onChange={(e) => setEditPrefix(e.target.value)}
-                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg font-mono text-sky-400 font-bold"
+                            className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg font-mono text-sky-400 font-bold"
                           />
                         </div>
-                        <div className="sm:col-span-2">
-                          <label className="text-slate-400 block mb-1">Catatan:</label>
+                        <div>
+                          <label className="text-slate-400 block mb-1">Span Digit Kamera:</label>
+                          <select
+                            value={editDigitCount}
+                            onChange={(e) => setEditDigitCount(parseInt(e.target.value) || 3)}
+                            className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg font-mono text-amber-300 font-bold"
+                          >
+                            <option value={2}>2 Digit (01)</option>
+                            <option value={3}>3 Digit (001)</option>
+                            <option value={4}>4 Digit (0001)</option>
+                            <option value={5}>5 Digit (00001)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-1">Counter Nomor Saat Ini:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={editCurrentNumber}
+                            onChange={(e) => setEditCurrentNumber(parseInt(e.target.value) || 1)}
+                            className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg font-mono text-slate-100 font-bold"
+                          />
+                        </div>
+                        <div className="sm:col-span-3">
+                          <label className="text-slate-400 block mb-1">Keterangan / Catatan Sesi:</label>
                           <input
                             type="text"
+                            placeholder="Input keterangan khusus untuk sesi ini..."
                             value={editNotes}
                             onChange={(e) => setEditNotes(e.target.value)}
-                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
+                            className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200"
                           />
                         </div>
                       </div>
-                      <div className="flex items-center justify-end gap-2 pt-1">
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
                         <button
                           onClick={() => setEditingSessionId(null)}
-                          className="px-3 py-1 bg-slate-800 text-slate-300 rounded-lg"
+                          className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 font-medium"
                         >
                           Batal
                         </button>
                         <button
                           onClick={() => handleSaveEdit(session.id)}
-                          className="px-4 py-1 bg-sky-500 text-white font-bold rounded-lg"
+                          className="px-4 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg shadow"
                         >
-                          Simpan
+                          Simpan Sesi
                         </button>
                       </div>
                     </div>
                   ) : (
                     /* NORMAL SESSION CARD VIEW */
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {isActive ? (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase border border-emerald-500/30 flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -417,15 +480,20 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                         </h4>
 
                         {session.notes && (
-                          <p className="text-xs text-slate-400 italic">{session.notes}</p>
+                          <p className="text-xs text-amber-300/90 italic bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 inline-block">
+                            💬 Keterangan: {session.notes}
+                          </p>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 pt-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 pt-1">
                           <span className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded font-mono text-sky-300">
                             Prefix: <strong className="text-sky-400">{session.prefix}</strong>
                           </span>
+                          <span className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded font-mono text-amber-300">
+                            Span Digit: <strong className="text-amber-400">{session.numberDigitCount || 3} Digit</strong>
+                          </span>
                           <span className="font-mono text-slate-300">
-                            #Next: #{session.currentNumber}
+                            #Next: #{String(session.currentNumber || 1).padStart(session.numberDigitCount || 3, '0')}
                           </span>
                           <span className="text-slate-400 flex items-center gap-1">
                             <Users className="w-3.5 h-3.5 text-slate-500" />
@@ -438,35 +506,37 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                         </div>
                       </div>
 
-                      {/* SESSION ACTION BUTTONS */}
+                      {/* SESSION ACTION BUTTONS - EDIT BUTTON ON FAR LEFT */}
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        {/* EDIT BUTTON POSISIONED ON FAR LEFT */}
+                        <button
+                          onClick={() => handleStartEdit(session)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="Edit Pengaturan Sesi Ini"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit Sesi</span>
+                        </button>
+
                         {!isActive ? (
                           <button
                             onClick={() => onSelectSession(session.id)}
-                            className="px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-all"
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-all"
                           >
-                            <span>Pilih & Aktifkan Sesi</span>
+                            <span>Pilih &amp; Aktifkan</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         ) : (
                           <div className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1">
                             <CheckCircle2 className="w-4 h-4" />
-                            <span>Sedang Digunakan</span>
+                            <span>Aktif</span>
                           </div>
                         )}
-
-                        <button
-                          onClick={() => handleStartEdit(session)}
-                          className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-colors"
-                          title="Edit Sesi"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
 
                         {sessions.length > 1 && (
                           <button
                             onClick={() => onDeleteSession(session.id)}
-                            className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl transition-colors"
+                            className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl transition-colors"
                             title="Hapus Sesi Ini"
                           >
                             <Trash2 className="w-4 h-4" />

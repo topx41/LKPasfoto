@@ -121,9 +121,10 @@ export const CaptureControl: React.FC<CaptureControlProps> = ({
           </div>
           <button
             onClick={onOpenSettings}
-            className="text-sky-400 hover:underline text-[11px] font-sans font-medium"
+            className="px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 transition-all cursor-pointer"
+            title="Edit Pengaturan Sesi Aktif Ini (Span Digit, Prefix, Catatan)"
           >
-            Setting
+            <span>⚙️ Edit Sesi</span>
           </button>
         </div>
       </div>

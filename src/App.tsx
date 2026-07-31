@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem } from '@capacitor/filesystem';
 import { isCapacitorNative } from './utils/nativeShareHelper';
 import { Customer, PhotoRecord, StudioSettings, StudioSession } from './types';
 import {
@@ -165,8 +167,33 @@ export default function App() {
       capSub = CapacitorApp.addListener('appUrlOpen', async (data) => {
         if (data?.url) {
           try {
-            const response = await fetch(data.url);
-            const blob = await response.blob();
+            let blob: Blob;
+            const targetUrl = data.url;
+
+            if (targetUrl.startsWith('content://') || targetUrl.startsWith('file://')) {
+              try {
+                const convertedUrl = Capacitor.convertFileSrc(targetUrl);
+                const response = await fetch(convertedUrl);
+                blob = await response.blob();
+              } catch (convErr) {
+                // Fallback via Filesystem plugin
+                const fileData = await Filesystem.readFile({ path: targetUrl });
+                const base64Content = typeof fileData.data === 'string' ? fileData.data : '';
+                const byteCharacters = atob(base64Content);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                blob = new Blob([byteArray], {
+                  type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                });
+              }
+            } else {
+              const response = await fetch(targetUrl);
+              blob = await response.blob();
+            }
+
             const file = new File([blob], 'Excel_Android_Share.xlsx', {
               type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             });
@@ -184,10 +211,13 @@ export default function App() {
                 setSharedImportFileName(file.name);
                 setIsImportOpen(true);
                 showToast(`⚡ File Excel dari Share Android diterima (${customers.length} customer)!`);
+              } else {
+                showToast('⚠️ File dari Share Sheet tidak memiliki data customer.');
               }
             }
           } catch (err) {
             console.error('Gagal memproses file dari Android Share Sheet:', err);
+            showToast('⚠️ Gagal membaca file dari Android Share Sheet.');
           }
         }
       });
@@ -620,6 +650,22 @@ export default function App() {
     showToast(`Customer ditambahkan ke sesi: ${name}`);
   };
 
+  // UPDATE CUSTOMER
+  const handleUpdateCustomer = (id: string, updates: Partial<Customer>) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              ...updates,
+              code: updates.absenceNumber !== undefined ? updates.absenceNumber : c.code,
+            }
+          : c
+      )
+    );
+    showToast('Data customer berhasil diperbarui.');
+  };
+
   // DELETE CUSTOMER
   const handleDeleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
@@ -935,7 +981,7 @@ export default function App() {
               settings={settings}
               onNextCustomer={handleNextCustomer}
               onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => setIsSessionModalOpen(true)}
               onResetCounter={handleResetSessionCounter}
               totalCapturedToday={sessionPhotos.length}
             />
@@ -966,6 +1012,7 @@ export default function App() {
               onOpenImportModal={() => setIsImportOpen(true)}
               onOpenSearchModal={() => setIsSearchOpen(true)}
               onAddCustomer={handleAddCustomer}
+              onUpdateCustomer={handleUpdateCustomer}
               onDeleteCustomer={handleDeleteCustomer}
               onDeleteMultipleCustomers={handleDeleteMultipleCustomers}
               onDeleteAllCustomers={handleDeleteAllCustomers}
@@ -1334,6 +1381,7 @@ export default function App() {
         activeSessionName={activeSession ? activeSession.name : 'Sesi Utama'}
         onSelectCustomer={handleSelectCustomer}
         onAddCustomer={handleAddCustomer}
+        onUpdateCustomer={handleUpdateCustomer}
         onDeleteCustomer={handleDeleteCustomer}
         onDeleteMultipleCustomers={handleDeleteMultipleCustomers}
         onDeleteAllCustomers={handleDeleteAllCustomers}

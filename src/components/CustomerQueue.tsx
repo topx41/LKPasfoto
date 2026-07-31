@@ -12,6 +12,8 @@ import {
   ChevronDown,
   AlertTriangle,
   Share2,
+  Edit2,
+  Save,
 } from 'lucide-react';
 import { Customer } from '../types';
 import { downloadOrShareCustomersExcel } from '../utils/excelUtils';
@@ -25,6 +27,7 @@ interface CustomerQueueProps {
   onOpenImportModal: () => void;
   onOpenSearchModal: () => void;
   onAddCustomer: (name: string, absenceNumber?: string) => void;
+  onUpdateCustomer?: (id: string, updates: Partial<Customer>) => void;
   onDeleteCustomer: (id: string) => void;
   onDeleteMultipleCustomers?: (ids: string[]) => void;
   onDeleteAllCustomers?: () => void;
@@ -39,6 +42,7 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
   onOpenImportModal,
   onOpenSearchModal,
   onAddCustomer,
+  onUpdateCustomer,
   onDeleteCustomer,
   onDeleteMultipleCustomers,
   onDeleteAllCustomers,
@@ -49,9 +53,40 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSharingCustomers, setIsSharingCustomers] = useState(false);
 
+  // Edit Customer Modal State
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAbsence, setEditAbsence] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+
   // Bulk Selection State for Front View
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
+
+  const handleStartEditCustomer = (customer: Customer, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingCustomer(customer);
+    setEditName(customer.name);
+    setEditAbsence(customer.absenceNumber || customer.code || '');
+    setEditCategory(customer.category || '');
+    setEditNotes(customer.notes || '');
+  };
+
+  const handleSaveEditCustomer = () => {
+    if (!editingCustomer || !onUpdateCustomer) return;
+    if (!editName.trim()) return;
+
+    onUpdateCustomer(editingCustomer.id, {
+      name: editName.trim(),
+      absenceNumber: editAbsence.trim() || undefined,
+      code: editAbsence.trim() || undefined,
+      category: editCategory.trim() || undefined,
+      notes: editNotes.trim() || undefined,
+    });
+
+    setEditingCustomer(null);
+  };
 
   const handleShareCustomersExcel = async () => {
     setIsSharingCustomers(true);
@@ -275,7 +310,7 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
               onClick={onOpenSearchModal}
               className="text-sky-400 hover:underline text-[10px] font-medium"
             >
-              Kelola & Lihat Semua
+              Kelola &amp; Lihat Semua
             </button>
           </div>
 
@@ -299,14 +334,26 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
                         : 'bg-slate-800/40 hover:bg-slate-800 border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      {/* EDIT BUTTON ON FAR LEFT */}
+                      {onUpdateCustomer && (
+                        <button
+                          onClick={(e) => handleStartEditCustomer(c, e)}
+                          title="Edit Customer (Paling Kiri)"
+                          className="p-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded-lg transition-colors shrink-0"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => handleToggleSelectCustomer(c.id, e)}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-3.5 h-3.5 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer shrink-0"
                       />
+
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-200 truncate group-hover:text-sky-400">
                           {c.name}
@@ -350,30 +397,150 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
           </div>
         </div>
 
-        {/* Completed Customers */}
+        {/* Completed Customers (WITH ABSEN COLUMN / BADGE) */}
         {completedCustomers.length > 0 && (
           <div>
-            <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Selesai Difoto ({completedCustomers.length})</span>
+            <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Selesai Difoto ({completedCustomers.length})</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Dilengkapi No. Absen</span>
             </div>
             <div className="space-y-1">
-              {completedCustomers.slice(0, 5).map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => onSelectCustomer(c)}
-                  className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 text-slate-300 flex items-center justify-between text-[11px] cursor-pointer hover:bg-emerald-500/10"
-                >
-                  <span className="truncate">{c.name}</span>
-                  <span className="text-[10px] text-emerald-400 font-mono shrink-0">
-                    {c.photoCount} foto
-                  </span>
-                </div>
-              ))}
+              {completedCustomers.slice(0, 10).map((c) => {
+                const absence = c.absenceNumber || c.code;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => onSelectCustomer(c)}
+                    className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-slate-200 flex items-center justify-between text-[11px] cursor-pointer hover:bg-emerald-500/20 transition-all group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      {/* EDIT BUTTON ON FAR LEFT FOR COMPLETED CUSTOMERS */}
+                      {onUpdateCustomer && (
+                        <button
+                          onClick={(e) => handleStartEditCustomer(c, e)}
+                          title="Edit Customer (Paling Kiri)"
+                          className="p-1 bg-slate-900/60 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded-lg transition-colors shrink-0"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      )}
+
+                      {/* ABSEN COLUMN / BADGE */}
+                      {absence ? (
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 shrink-0">
+                          Absen #{absence}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-500 font-mono text-[10px] shrink-0">
+                          No. Absen: -
+                        </span>
+                      )}
+
+                      <span className="truncate font-bold text-slate-100">{c.name}</span>
+                    </div>
+
+                    <span className="text-[10px] text-emerald-300 font-mono font-bold shrink-0 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      📷 {c.photoCount} foto
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </div>
+
+      {/* EDIT CUSTOMER MODAL */}
+      {editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-5 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-sky-500/10 text-sky-400 rounded-lg">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-100">Edit Data Customer</h3>
+                  <p className="text-xs text-slate-400">Perbarui nama, nomor absen, &amp; kategori</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingCustomer(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Nama Customer:</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-slate-100 font-bold rounded-xl focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Nomor Absen / ID Customer:</label>
+                <input
+                  type="text"
+                  placeholder="cth: 12"
+                  value={editAbsence}
+                  onChange={(e) => setEditAbsence(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-amber-300 font-mono font-bold rounded-xl focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Kategori / Paket:</label>
+                <input
+                  type="text"
+                  placeholder="cth: Wisuda, Pas Foto, Kelas A"
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-slate-200 rounded-xl focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Catatan / Keterangan:</label>
+                <input
+                  type="text"
+                  placeholder="Catatan khusus customer..."
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 text-slate-200 rounded-xl focus:outline-none focus:border-sky-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditCustomer}
+                className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Perubahan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer / Action Controls */}
       <div className="p-3 border-t border-slate-800 bg-slate-900">

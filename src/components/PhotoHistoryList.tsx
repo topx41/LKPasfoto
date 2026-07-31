@@ -157,13 +157,14 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+              <th className="py-2.5 px-3 w-12 text-center">Edit</th>
               <th className="py-2.5 px-3 w-10 text-center">No</th>
               <th className="py-2.5 px-3">Nama Customer</th>
               <th className="py-2.5 px-3">No. Absen / ID</th>
               <th className="py-2.5 px-3">File Kamera</th>
               <th className="py-2.5 px-3 w-16 text-center">Tandai</th>
               <th className="py-2.5 px-3">Keterangan</th>
-              <th className="py-2.5 px-3 text-right">Aksi</th>
+              <th className="py-2.5 px-3 text-right">Hapus</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -176,6 +177,18 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                     photo.isMarked ? 'bg-amber-500/5' : ''
                   }`}
                 >
+                  {/* EDIT BUTTON ON FAR LEFT */}
+                  <td className="py-2.5 px-3 text-center">
+                    <button
+                      onClick={(e) => handleOpenEditPopup(photo, e)}
+                      title="Edit Data Rekap (Popup Modal)"
+                      className="p-1.5 bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-slate-950 rounded-lg transition-colors font-bold inline-flex items-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline text-[10px]">Edit</span>
+                    </button>
+                  </td>
+
                   {/* No */}
                   <td className="py-2.5 px-3 text-center text-slate-500 font-mono font-medium">
                     {idx + 1}
@@ -229,25 +242,15 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                     {photo.notes ? `💬 ${photo.notes}` : <span className="text-slate-600 font-sans not-italic">-</span>}
                   </td>
 
-                  {/* Actions */}
+                  {/* Hapus Action */}
                   <td className="py-2.5 px-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={(e) => handleOpenEditPopup(photo, e)}
-                        title="Edit Data Rekap (Popup Modal)"
-                        className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-slate-800 rounded-lg transition-colors"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={() => onDeletePhoto(photo.id)}
-                        title="Hapus Record Foto"
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => onDeletePhoto(photo.id)}
+                      title="Hapus Record Foto"
+                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </td>
                 </tr>
               );
