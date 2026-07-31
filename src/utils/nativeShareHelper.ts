@@ -33,31 +33,34 @@ export async function shareFileNative(file: File, title: string, text: string): 
   }
 
   // 2. Web Share API (Mobile Web Browsers)
-  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title,
-        text,
-      });
-      return true;
-    } catch (err: any) {
-      if (err.name === 'AbortError') return false;
-      console.warn('Web Share API error:', err);
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title,
+          text,
+        });
+        return true;
+      }
     }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return false;
+    console.warn('Web Share API file error:', err);
   }
 
   // 3. Fallback: Share Text via Web Share
-  if (typeof navigator !== 'undefined' && navigator.share) {
-    try {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       await navigator.share({
         title,
         text: `${text}\n\n📁 File ${file.name} siap di folder Download.`,
       });
       return true;
-    } catch (err: any) {
-      if (err.name === 'AbortError') return false;
     }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return false;
+    console.warn('Web Share API text error:', err);
   }
 
   return false;

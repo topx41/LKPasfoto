@@ -19,6 +19,8 @@ import {
   Sliders,
 } from 'lucide-react';
 
+import { App as CapacitorApp } from '@capacitor/app';
+import { isCapacitorNative } from './utils/nativeShareHelper';
 import { Customer, PhotoRecord, StudioSettings, StudioSession } from './types';
 import {
   loadSettings,
@@ -156,7 +158,47 @@ export default function App() {
 
     checkPendingSharedImport();
     window.addEventListener('focus', checkPendingSharedImport);
-    return () => window.removeEventListener('focus', checkPendingSharedImport);
+
+    // Listen for Capacitor Native App Url / File Open Intent from Android Share Sheet
+    let capSub: any = null;
+    if (isCapacitorNative()) {
+      capSub = CapacitorApp.addListener('appUrlOpen', async (data) => {
+        if (data?.url) {
+          try {
+            const response = await fetch(data.url);
+            const blob = await response.blob();
+            const file = new File([blob], 'Excel_Android_Share.xlsx', {
+              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const extracted = await extractRawExcelFromFile(file);
+            if (extracted) {
+              setSharedRawSheetData(extracted.rawSheetData);
+              setSharedMappingConfig(extracted.mappingConfig);
+              setSharedImportFileName(file.name);
+              setIsImportOpen(true);
+              showToast('⚡ File Excel dari Share Android diterima! Siap dipreview & diimpor.');
+            } else {
+              const customers = await parseCustomerExcel(file);
+              if (customers.length > 0) {
+                setSharedImportData(customers);
+                setSharedImportFileName(file.name);
+                setIsImportOpen(true);
+                showToast(`⚡ File Excel dari Share Android diterima (${customers.length} customer)!`);
+              }
+            }
+          } catch (err) {
+            console.error('Gagal memproses file dari Android Share Sheet:', err);
+          }
+        }
+      });
+    }
+
+    return () => {
+      window.removeEventListener('focus', checkPendingSharedImport);
+      if (capSub && typeof capSub.remove === 'function') {
+        capSub.remove();
+      }
+    };
   }, [showToast]);
 
   // Handle Global Drag and Drop File anywhere on window
@@ -690,36 +732,9 @@ export default function App() {
     showToast('Data foto rekap berhasil diperbarui!');
   };
 
-  // EXPORT / SHARE REKAP EXCEL (Direct Device App Share with Fallback)
-  const handleExportExcel = async () => {
-    setIsSharing(true);
-    try {
-      const now = new Date();
-      const dateFormatted = now.toLocaleDateString('id-ID', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
-      const res = await downloadOrShareExcel(
-        sessionPhotos,
-        sessionCustomers,
-        activeSession.name,
-        dateFormatted,
-        activeSession.prefix
-      );
-      if (res.method === 'share' && res.success) {
-        showToast('✅ Berhasil membagikan file Excel rekap!');
-      } else if (res.method === 'download') {
-        showToast('📥 File Excel rekap diunduh & siap dilampirkan.');
-        setIsExportShareOpen(true);
-      }
-    } catch (err) {
-      console.error('Export error:', err);
-      setIsExportShareOpen(true);
-    } finally {
-      setIsSharing(false);
-    }
+  // EXPORT / SHARE REKAP EXCEL
+  const handleExportExcel = () => {
+    setIsExportShareOpen(true);
   };
 
   // RESET CURRENT SESSION COUNTER

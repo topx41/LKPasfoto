@@ -55,6 +55,40 @@ jobs:
             echo "Folder android belum ada, membuat platform android dengan Capacitor..."
             npx cap add android
           fi
+
+          # Inject Intent Filter into AndroidManifest.xml so app appears in Android Share Sheet
+          MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
+            echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
+            python3 -c '
+manifest_path = "android/app/src/main/AndroidManifest.xml"
+with open(manifest_path, "r", encoding="utf-8") as f:
+    content = f.read()
+
+share_intent = """
+            <!-- Register app in Android System Share Sheet for Excel & CSV Files -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/excel" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+"""
+
+if "</activity>" in content and "android.intent.action.SEND" not in content:
+    content = content.replace("</activity>", share_intent + "\n        </activity>")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print("Successfully injected Share Intent Filter!")
+'
+          fi
+
           echo "Melakukan sync file web ke project Android..."
           npx cap sync android
 
