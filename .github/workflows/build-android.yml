@@ -61,12 +61,12 @@ jobs:
           if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
             echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
             cat << 'EOF' > inject_intent.js
-            const fs = require('fs');
-            const manifestPath = 'android/app/src/main/AndroidManifest.xml';
-            if (fs.existsSync(manifestPath)) {
-              let content = fs.readFileSync(manifestPath, 'utf-8');
-              if (!content.includes('android.intent.action.SEND')) {
-                const shareIntent = `
+const fs = require('fs');
+const manifestPath = 'android/app/src/main/AndroidManifest.xml';
+if (fs.existsSync(manifestPath)) {
+  let content = fs.readFileSync(manifestPath, 'utf-8');
+  if (!content.includes('android.intent.action.SEND')) {
+    const shareIntent = `
             <!-- Register app in Android System Share Sheet for Excel & CSV Files -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -80,12 +80,12 @@ jobs:
                 <data android:mimeType="application/excel" />
                 <data android:mimeType="*/*" />
             </intent-filter>`;
-                content = content.replace('</activity>', shareIntent + '\n        </activity>');
-                fs.writeFileSync(manifestPath, content, 'utf-8');
-                console.log('Successfully injected Share Intent Filter!');
-              }
-            }
-            EOF
+    content = content.replace('</activity>', shareIntent + '\n        </activity>');
+    fs.writeFileSync(manifestPath, content, 'utf-8');
+    console.log('Successfully injected Share Intent Filter!');
+  }
+}
+EOF
             node inject_intent.js
             rm -f inject_intent.js
           fi
