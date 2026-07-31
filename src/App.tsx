@@ -163,6 +163,7 @@ export default function App() {
         // 1. Check server pending import ID via URL query or localStorage
         const urlParams = new URLSearchParams(window.location.search);
         const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id');
+        const isShareQuery = urlParams.get('shared_import') || urlParams.get('imported_share') || urlParams.get('imported_text_share');
         
         if (tempId) {
           localStorage.removeItem('foto_studio_pending_import_id');
@@ -170,9 +171,14 @@ export default function App() {
             const res = await fetch(`/api/pending-import/${tempId}`);
             if (res.ok) {
               const data = await res.json();
-              if (data && data.rawSheetData) {
-                const autoConfig = autoDetectColumnMapping(data.rawSheetData.rawRows, data.rawSheetData.maxCols);
-                setSharedRawSheetData(data.rawSheetData);
+              if (data) {
+                const sheetData = data.rawSheetData || {
+                  sheetName: 'File_Share_Diterima',
+                  rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
+                  maxCols: 4,
+                };
+                const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
+                setSharedRawSheetData(sheetData);
                 setSharedMappingConfig(autoConfig);
                 setSharedImportFileName(data.fileName || 'Excel_Share_Sheet.xlsx');
                 if (Array.isArray(data.customers) && data.customers.length > 0) {
@@ -187,6 +193,12 @@ export default function App() {
           } catch (fetchErr) {
             console.error('Failed to fetch pending import by ID:', fetchErr);
           }
+        }
+
+        if (isShareQuery) {
+          setIsImportOpen(true);
+          showToast('⚡ Aplikasi dibuka dari Share Sheet! Silakan pilih / periksa data customer.');
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
 
         // 2. Check localStorage raw shared payload fallback

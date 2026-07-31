@@ -69,47 +69,75 @@ async function startServer() {
       let parsedCustomers: any[] = [];
       let fileName = 'Excel_Diterima.xlsx';
 
-      if (file && file.buffer) {
-        fileName = file.originalname || 'Excel_WhatsApp.xlsx';
-        const workbook = XLSX.read(file.buffer, { type: "buffer" });
-        if (workbook.SheetNames && workbook.SheetNames.length > 0) {
-          const sheetName = workbook.SheetNames[0];
-          const firstSheet = workbook.Sheets[sheetName];
-          const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: "" });
-          const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: "" });
+      if (file && file.buffer && file.buffer.length > 0) {
+        fileName = file.originalname || 'Excel_Diterima.xlsx';
+        
+        // 1. Try XLSX Excel parsing
+        try {
+          const workbook = XLSX.read(file.buffer, { type: "buffer" });
+          if (workbook.SheetNames && workbook.SheetNames.length > 0) {
+            const sheetName = workbook.SheetNames[0];
+            const firstSheet = workbook.Sheets[sheetName];
+            const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: "" });
+            const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: "" });
 
-          let maxCols = 0;
-          if (Array.isArray(rawRows)) {
-            rawRows.forEach((r) => {
-              if (Array.isArray(r) && r.length > maxCols) maxCols = r.length;
-            });
+            let maxCols = 0;
+            if (Array.isArray(rawRows)) {
+              rawRows.forEach((r) => {
+                if (Array.isArray(r) && r.length > maxCols) maxCols = r.length;
+              });
+            }
+
+            rawSheetData = {
+              sheetName,
+              rawRows: Array.isArray(rawRows) ? rawRows : [],
+              maxCols,
+            };
+
+            const sampleRow = jsonRows[0] || {};
+            const keys = Object.keys(sampleRow);
+            let nameKey = keys.find((k) => /nama|customer|client|orang|peserta|name/i.test(k)) || keys[0] || "";
+            let codeKey = keys.find((k) => /kode|code|id|no|nomor|absen/i.test(k) && k !== nameKey);
+            let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
+            let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
+
+            parsedCustomers = jsonRows
+              .map((row) => {
+                const rawName = String(row[nameKey] || "").trim();
+                if (!rawName) return null;
+                return {
+                  name: rawName,
+                  code: codeKey ? String(row[codeKey]).trim() : undefined,
+                  category: categoryKey ? String(row[categoryKey]).trim() : undefined,
+                  notes: notesKey ? String(row[notesKey]).trim() : undefined,
+                };
+              })
+              .filter(Boolean);
           }
-
-          rawSheetData = {
-            sheetName,
-            rawRows: Array.isArray(rawRows) ? rawRows : [],
-            maxCols,
-          };
-
-          const sampleRow = jsonRows[0] || {};
-          const keys = Object.keys(sampleRow);
-          let nameKey = keys.find((k) => /nama|customer|client|orang|peserta|name/i.test(k)) || keys[0] || "";
-          let codeKey = keys.find((k) => /kode|code|id|no|nomor|absen/i.test(k) && k !== nameKey);
-          let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
-          let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
-
-          parsedCustomers = jsonRows
-            .map((row) => {
-              const rawName = String(row[nameKey] || "").trim();
-              if (!rawName) return null;
-              return {
-                name: rawName,
-                code: codeKey ? String(row[codeKey]).trim() : undefined,
-                category: categoryKey ? String(row[categoryKey]).trim() : undefined,
-                notes: notesKey ? String(row[notesKey]).trim() : undefined,
+        } catch (xlsxErr) {
+          console.warn("XLSX parsing failed, trying text/CSV fallback:", xlsxErr);
+          
+          // 2. Fallback text/CSV parsing
+          try {
+            const textContent = file.buffer.toString('utf-8');
+            if (textContent && textContent.trim().length > 0) {
+              const lines = textContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              const parsedRows: string[][] = lines.map(line => {
+                if (line.includes('\t')) return line.split('\t').map(p => p.trim());
+                if (line.includes(';')) return line.split(';').map(p => p.trim());
+                if (line.includes(',')) return line.split(',').map(p => p.trim());
+                return ['', line, '', ''];
+              });
+              
+              rawSheetData = {
+                sheetName: 'Hasil_Import_Text',
+                rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'], ...parsedRows],
+                maxCols: 4,
               };
-            })
-            .filter(Boolean);
+            }
+          } catch (textErr) {
+            console.error("Text fallback parsing failed:", textErr);
+          }
         }
       }
 
@@ -142,28 +170,14 @@ async function startServer() {
       }
 
       if (!rawSheetData) {
-        return res.status(400).send(`
-          <!DOCTYPE html>
-          <html lang="id">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Batal Impor - File Tidak Ditemukan</title>
-            <style>
-              body { background: #020617; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center; }
-              .card { background: #0f172a; border: 1px solid #334155; padding: 24px; border-radius: 16px; max-width: 400px; }
-              a { color: #38bdf8; font-weight: bold; text-decoration: none; display: inline-block; margin-top: 16px; }
-            </style>
-          </head>
-          <body>
-            <div class="card">
-              <h2>⚠️ File Excel Tidak Terbaca</h2>
-              <p>Pastikan Anda memilih file berformat .xlsx, .xls, .csv atau teks daftar customer dari WhatsApp.</p>
-              <a href="/">Kembali ke Aplikasi Studio</a>
-            </div>
-          </body>
-          </html>
-        `);
+        // Fallback default sheet structure so the app always opens the import modal
+        rawSheetData = {
+          sheetName: 'File_Share_Diterima',
+          rawRows: [
+            ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'],
+          ],
+          maxCols: 4,
+        };
       }
 
       // Generate unique token for this share import
