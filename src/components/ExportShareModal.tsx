@@ -37,6 +37,7 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [isSharingNative, setIsSharingNative] = useState(false);
+  const [copiedTable, setCopiedTable] = useState(false);
 
   if (!isOpen) return null;
 
@@ -163,8 +164,6 @@ export const ExportShareModal: React.FC<ExportShareModalProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const [copiedTable, setCopiedTable] = useState(false);
 
   // Helper to build TSV table
   const getTSVTable = () => {
