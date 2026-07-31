@@ -105,9 +105,15 @@ export default function App() {
         const raw = localStorage.getItem('foto_studio_pending_shared_import');
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.customers) && parsed.customers.length > 0) {
-            localStorage.removeItem('foto_studio_pending_shared_import');
-            setSharedImportData(parsed.customers);
+          localStorage.removeItem('foto_studio_pending_shared_import');
+          if (parsed) {
+            if (parsed.rawSheetData) {
+              setSharedRawSheetData(parsed.rawSheetData);
+              setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
+            }
+            if (Array.isArray(parsed.customers) && parsed.customers.length > 0) {
+              setSharedImportData(parsed.customers);
+            }
             setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
             setIsImportOpen(true);
             showToast(`⚡ File Excel (${parsed.fileName || 'WhatsApp'}) berhasil diterima!`);
