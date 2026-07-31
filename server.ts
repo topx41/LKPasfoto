@@ -41,8 +41,7 @@ async function startServer() {
     if (!data) {
       return res.status(404).json({ error: "Import data expired or not found" });
     }
-    // Delete after read to prevent reuse
-    tempImportStore.delete(id);
+    // Keep data in store so multi-fetch or page refocus won't break
     res.json(data);
   });
 
@@ -176,8 +175,8 @@ async function startServer() {
         timestamp: Date.now(),
       });
 
-      // HTML Response that sets pending import in localStorage and redirects
-      res.send(`
+      // HTML Response that sets pending import ID and redirects to app
+      res.status(200).send(`
         <!DOCTYPE html>
         <html lang="id">
         <head>
@@ -196,23 +195,19 @@ async function startServer() {
         <body>
           <div class="card">
             <div class="spinner"></div>
-            <h2>⚡ File / Data Diterima!</h2>
-            <p>Memproses data customer di Liankhay Capture Manager...</p>
+            <h2>⚡ Data Excel Diterima!</h2>
+            <p>Membuka preview & mapping kolom customer di Liankhay Capture Manager...</p>
           </div>
           <script>
             const tempId = ${JSON.stringify(tempId)};
             try {
               localStorage.setItem('foto_studio_pending_import_id', tempId);
-              localStorage.setItem('foto_studio_pending_shared_import', JSON.stringify({
-                rawSheetData: ${JSON.stringify(rawSheetData)},
-                fileName: ${JSON.stringify(fileName)}
-              }));
             } catch(e) {
               console.error('Local storage write error:', e);
             }
             setTimeout(() => {
-              window.location.href = '/?shared_import_id=' + tempId + '&t=' + Date.now();
-            }, 300);
+              window.location.replace('/?shared_import_id=' + tempId + '&t=' + Date.now());
+            }, 150);
           </script>
         </body>
         </html>
