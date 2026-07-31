@@ -60,22 +60,13 @@ jobs:
           MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
             echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
-<<<<<<< HEAD
-            node -e '
-              const fs = require("fs");
-              const manifestPath = "android/app/src/main/AndroidManifest.xml";
-              if (fs.existsSync(manifestPath)) {
-                let content = fs.readFileSync(manifestPath, "utf-8");
-                if (!content.includes("android.intent.action.SEND")) {
-                  const shareIntent = `
-=======
-            python3 -c '
-manifest_path = "android/app/src/main/AndroidManifest.xml"
-with open(manifest_path, "r", encoding="utf-8") as f:
-    content = f.read()
-
-share_intent = """
->>>>>>> 471ba1b039f9949fbd79653660855a3492e51ea6
+            cat << 'EOF' > inject_intent.js
+            const fs = require('fs');
+            const manifestPath = 'android/app/src/main/AndroidManifest.xml';
+            if (fs.existsSync(manifestPath)) {
+              let content = fs.readFileSync(manifestPath, 'utf-8');
+              if (!content.includes('android.intent.action.SEND')) {
+                const shareIntent = `
             <!-- Register app in Android System Share Sheet for Excel & CSV Files -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -88,25 +79,15 @@ share_intent = """
                 <data android:mimeType="application/csv" />
                 <data android:mimeType="application/excel" />
                 <data android:mimeType="*/*" />
-<<<<<<< HEAD
             </intent-filter>`;
-                  content = content.replace("</activity>", shareIntent + "\n        </activity>");
-                  fs.writeFileSync(manifestPath, content, "utf-8");
-                  console.log("Successfully injected Share Intent Filter!");
-                }
+                content = content.replace('</activity>', shareIntent + '\n        </activity>');
+                fs.writeFileSync(manifestPath, content, 'utf-8');
+                console.log('Successfully injected Share Intent Filter!');
               }
-            '
-=======
-            </intent-filter>
-"""
-
-if "</activity>" in content and "android.intent.action.SEND" not in content:
-    content = content.replace("</activity>", share_intent + "\n        </activity>")
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    print("Successfully injected Share Intent Filter!")
-'
->>>>>>> 471ba1b039f9949fbd79653660855a3492e51ea6
+            }
+            EOF
+            node inject_intent.js
+            rm -f inject_intent.js
           fi
 
           echo "Melakukan sync file web ke project Android..."
