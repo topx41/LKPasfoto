@@ -48,6 +48,54 @@
             ".csv",
             "*/*"
           ]
+        },
+        {
+          "name": "file",
+          "accept": [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv",
+            "application/csv",
+            "application/excel",
+            "application/vnd.msexcel",
+            "application/octet-stream",
+            ".xlsx",
+            ".xls",
+            ".csv",
+            "*/*"
+          ]
+        },
+        {
+          "name": "document",
+          "accept": [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv",
+            "application/csv",
+            "application/excel",
+            "application/vnd.msexcel",
+            "application/octet-stream",
+            ".xlsx",
+            ".xls",
+            ".csv",
+            "*/*"
+          ]
+        },
+        {
+          "name": "shared_file",
+          "accept": [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+            "text/csv",
+            "application/csv",
+            "application/excel",
+            "application/vnd.msexcel",
+            "application/octet-stream",
+            ".xlsx",
+            ".xls",
+            ".csv",
+            "*/*"
+          ]
         }
       ]
     }

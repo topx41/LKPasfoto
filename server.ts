@@ -175,6 +175,16 @@ async function startServer() {
         timestamp: Date.now(),
       });
 
+      if (req.headers.accept?.includes('application/json') || req.xhr) {
+        return res.json({
+          success: true,
+          tempId,
+          fileName,
+          rawSheetData,
+          customersCount: parsedCustomers.length,
+        });
+      }
+
       // HTML Response that sets pending import ID and redirects to app
       res.status(200).send(`
         <!DOCTYPE html>
