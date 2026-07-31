@@ -9,6 +9,18 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
 });
 
+// Temporary in-memory store for shared imports (expires after 30 mins)
+const tempImportStore = new Map<string, { rawSheetData: any; fileName: string; customers: any[]; timestamp: number }>();
+
+function cleanupTempImports() {
+  const now = Date.now();
+  for (const [id, item] of tempImportStore.entries()) {
+    if (now - item.timestamp > 30 * 60 * 1000) {
+      tempImportStore.delete(id);
+    }
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -21,9 +33,23 @@ async function startServer() {
     res.json({ status: "ok", message: "Foto Studio Manager Server Ready" });
   });
 
-  // WEB SHARE TARGET API ENDPOINT (Receives Excel files shared from WhatsApp / Telegram / File Manager)
+  // GET API to retrieve pending shared import payload by ID
+  app.get("/api/pending-import/:id", (req, res) => {
+    cleanupTempImports();
+    const id = req.params.id;
+    const data = tempImportStore.get(id);
+    if (!data) {
+      return res.status(404).json({ error: "Import data expired or not found" });
+    }
+    // Delete after read to prevent reuse
+    tempImportStore.delete(id);
+    res.json(data);
+  });
+
+  // WEB SHARE TARGET API ENDPOINT (Receives Excel files or shared text from WhatsApp / Telegram / Share Sheet)
   const handleShareTargetRequest = (req: express.Request, res: express.Response) => {
     try {
+      cleanupTempImports();
       let file: Express.Multer.File | undefined;
 
       if (Array.isArray(req.files) && req.files.length > 0) {
@@ -40,7 +66,83 @@ async function startServer() {
         file = (req as any).file;
       }
 
-      if (!file || !file.buffer) {
+      let rawSheetData: any = null;
+      let parsedCustomers: any[] = [];
+      let fileName = 'Excel_Diterima.xlsx';
+
+      if (file && file.buffer) {
+        fileName = file.originalname || 'Excel_WhatsApp.xlsx';
+        const workbook = XLSX.read(file.buffer, { type: "buffer" });
+        if (workbook.SheetNames && workbook.SheetNames.length > 0) {
+          const sheetName = workbook.SheetNames[0];
+          const firstSheet = workbook.Sheets[sheetName];
+          const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: "" });
+          const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: "" });
+
+          let maxCols = 0;
+          if (Array.isArray(rawRows)) {
+            rawRows.forEach((r) => {
+              if (Array.isArray(r) && r.length > maxCols) maxCols = r.length;
+            });
+          }
+
+          rawSheetData = {
+            sheetName,
+            rawRows: Array.isArray(rawRows) ? rawRows : [],
+            maxCols,
+          };
+
+          const sampleRow = jsonRows[0] || {};
+          const keys = Object.keys(sampleRow);
+          let nameKey = keys.find((k) => /nama|customer|client|orang|peserta|name/i.test(k)) || keys[0] || "";
+          let codeKey = keys.find((k) => /kode|code|id|no|nomor|absen/i.test(k) && k !== nameKey);
+          let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
+          let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
+
+          parsedCustomers = jsonRows
+            .map((row) => {
+              const rawName = String(row[nameKey] || "").trim();
+              if (!rawName) return null;
+              return {
+                name: rawName,
+                code: codeKey ? String(row[codeKey]).trim() : undefined,
+                category: categoryKey ? String(row[categoryKey]).trim() : undefined,
+                notes: notesKey ? String(row[notesKey]).trim() : undefined,
+              };
+            })
+            .filter(Boolean);
+        }
+      }
+
+      // Check if text/URL was shared instead of binary file
+      const sharedText = req.body?.text || req.body?.title || req.body?.url || '';
+      if (!rawSheetData && sharedText && String(sharedText).trim().length > 0) {
+        fileName = 'Teks_Share_WA.txt';
+        const lines = String(sharedText).split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const parsedRows: string[][] = [];
+        lines.forEach((line) => {
+          if (line.includes('\t')) {
+            parsedRows.push(line.split('\t').map((p) => p.trim()));
+          } else if (line.includes(';')) {
+            parsedRows.push(line.split(';').map((p) => p.trim()));
+          } else {
+            const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+            if (numMatch && numMatch[2].trim()) {
+              parsedRows.push([numMatch[1].trim(), numMatch[2].trim(), '', '']);
+            } else {
+              parsedRows.push(['', line, '', '']);
+            }
+          }
+        });
+        const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
+        rawSheetData = {
+          sheetName: 'Hasil_Share_Teks',
+          rawRows: [header, ...parsedRows],
+          maxCols: 4,
+        };
+      }
+
+      if (!rawSheetData) {
         return res.status(400).send(`
           <!DOCTYPE html>
           <html lang="id">
@@ -57,7 +159,7 @@ async function startServer() {
           <body>
             <div class="card">
               <h2>⚠️ File Excel Tidak Terbaca</h2>
-              <p>Pastikan Anda memilih file berformat .xlsx atau .xls saat membagikan dari WhatsApp.</p>
+              <p>Pastikan Anda memilih file berformat .xlsx, .xls, .csv atau teks daftar customer dari WhatsApp.</p>
               <a href="/">Kembali ke Aplikasi Studio</a>
             </div>
           </body>
@@ -65,59 +167,16 @@ async function startServer() {
         `);
       }
 
-      // Parse Excel Buffer
-      const workbook = XLSX.read(file.buffer, { type: "buffer" });
-      if (!workbook.SheetNames || !workbook.SheetNames.length) {
-        throw new Error("File Excel kosong.");
-      }
+      // Generate unique token for this share import
+      const tempId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      tempImportStore.set(tempId, {
+        rawSheetData,
+        fileName,
+        customers: parsedCustomers,
+        timestamp: Date.now(),
+      });
 
-      const sheetName = workbook.SheetNames[0];
-      const firstSheet = workbook.Sheets[sheetName];
-      const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: "" });
-      const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: "" });
-
-      if (jsonRows.length === 0 && rawRows.length === 0) {
-        throw new Error("Tidak ada data dalam sheet Excel.");
-      }
-
-      // Detect columns
-      const sampleRow = jsonRows[0] || {};
-      const keys = Object.keys(sampleRow);
-
-      let nameKey = keys.find((k) => /nama|customer|client|orang|peserta|name/i.test(k)) || keys[0] || "";
-      let codeKey = keys.find((k) => /kode|code|id|no|nomor|absen/i.test(k) && k !== nameKey);
-      let categoryKey = keys.find((k) => /kategori|category|kelompok|kelas|grup/i.test(k));
-      let notesKey = keys.find((k) => /catatan|note|keterangan/i.test(k));
-
-      const parsedCustomers = jsonRows
-        .map((row) => {
-          const rawName = String(row[nameKey] || "").trim();
-          if (!rawName) return null;
-          return {
-            name: rawName,
-            code: codeKey ? String(row[codeKey]).trim() : undefined,
-            category: categoryKey ? String(row[categoryKey]).trim() : undefined,
-            notes: notesKey ? String(row[notesKey]).trim() : undefined,
-          };
-        })
-        .filter(Boolean);
-
-      let maxCols = 0;
-      if (Array.isArray(rawRows)) {
-        rawRows.forEach((r) => {
-          if (Array.isArray(r) && r.length > maxCols) maxCols = r.length;
-        });
-      }
-
-      const rawSheetData = {
-        sheetName,
-        rawRows: Array.isArray(rawRows) ? rawRows : [],
-        maxCols,
-      };
-
-      const fileName = file.originalname || "Excel_WhatsApp.xlsx";
-
-      // HTML Response that sets pending shared import in localStorage and redirects to app
+      // HTML Response that sets pending import in localStorage and redirects
       res.send(`
         <!DOCTYPE html>
         <html lang="id">
@@ -137,24 +196,23 @@ async function startServer() {
         <body>
           <div class="card">
             <div class="spinner"></div>
-            <h2>⚡ File Excel Diterima!</h2>
-            <p>Membuka ${parsedCustomers.length} customer di Liankhay Capture Manager...</p>
+            <h2>⚡ File / Data Diterima!</h2>
+            <p>Memproses data customer di Liankhay Capture Manager...</p>
           </div>
           <script>
+            const tempId = ${JSON.stringify(tempId)};
             try {
-              const payload = {
-                customers: ${JSON.stringify(parsedCustomers)},
+              localStorage.setItem('foto_studio_pending_import_id', tempId);
+              localStorage.setItem('foto_studio_pending_shared_import', JSON.stringify({
                 rawSheetData: ${JSON.stringify(rawSheetData)},
-                fileName: ${JSON.stringify(fileName)},
-                timestamp: Date.now()
-              };
-              localStorage.setItem('foto_studio_pending_shared_import', JSON.stringify(payload));
+                fileName: ${JSON.stringify(fileName)}
+              }));
             } catch(e) {
               console.error('Local storage write error:', e);
             }
             setTimeout(() => {
-              window.location.href = '/?shared_import=success';
-            }, 500);
+              window.location.href = '/?shared_import_id=' + tempId + '&t=' + Date.now();
+            }, 300);
           </script>
         </body>
         </html>

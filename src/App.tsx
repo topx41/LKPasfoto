@@ -47,6 +47,7 @@ import {
   downloadOrShareExcel,
   parseCustomerExcel,
   extractRawExcelFromFile,
+  autoDetectColumnMapping,
   RawExcelSheetData,
   ColumnMappingConfig,
   ImportedCustomer,
@@ -102,55 +103,193 @@ export default function App() {
     }, 4000);
   }, []);
 
-  // Check for shared Excel file from WhatsApp Share Target Endpoint or Service Worker Cache
+  // Check for shared Excel file from WhatsApp Share Target Endpoint, Service Worker Cache, or Capacitor Intent
   useEffect(() => {
+    const processCapacitorShareUrl = async (targetUrl: string) => {
+      try {
+        let blob: Blob;
+        if (targetUrl.startsWith('content://') || targetUrl.startsWith('file://')) {
+          try {
+            const convertedUrl = Capacitor.convertFileSrc(targetUrl);
+            const response = await fetch(convertedUrl);
+            blob = await response.blob();
+          } catch (convErr) {
+            const fileData = await Filesystem.readFile({ path: targetUrl });
+            const base64Content = typeof fileData.data === 'string' ? fileData.data : '';
+            const byteCharacters = atob(base64Content);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            blob = new Blob([byteArray], {
+              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+          }
+        } else {
+          const response = await fetch(targetUrl);
+          blob = await response.blob();
+        }
+
+        const file = new File([blob], 'Excel_Android_Share.xlsx', {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const extracted = await extractRawExcelFromFile(file);
+        if (extracted) {
+          setSharedRawSheetData(extracted.rawSheetData);
+          setSharedMappingConfig(extracted.mappingConfig);
+          setSharedImportFileName(file.name);
+          setIsImportOpen(true);
+          showToast('⚡ File Excel dari Share Android diterima! Siap dipreview & diimpor.');
+        } else {
+          const customers = await parseCustomerExcel(file);
+          if (customers.length > 0) {
+            setSharedImportData(customers);
+            setSharedImportFileName(file.name);
+            setIsImportOpen(true);
+            showToast(`⚡ File Excel dari Share Android diterima (${customers.length} customer)!`);
+          } else {
+            showToast('⚠️ File dari Share Sheet tidak memiliki data customer.');
+          }
+        }
+      } catch (err) {
+        console.error('Gagal memproses file dari Android Share Sheet:', err);
+        showToast('⚠️ Gagal membaca file dari Android Share Sheet.');
+      }
+    };
+
     const checkPendingSharedImport = async () => {
       try {
-        const raw = localStorage.getItem('foto_studio_pending_shared_import');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          localStorage.removeItem('foto_studio_pending_shared_import');
-          if (parsed) {
-            if (parsed.rawSheetData) {
-              setSharedRawSheetData(parsed.rawSheetData);
-              setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
+        // 1. Check server pending import ID via URL query or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id');
+        
+        if (tempId) {
+          localStorage.removeItem('foto_studio_pending_import_id');
+          try {
+            const res = await fetch(`/api/pending-import/${tempId}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.rawSheetData) {
+                const autoConfig = autoDetectColumnMapping(data.rawSheetData.rawRows, data.rawSheetData.maxCols);
+                setSharedRawSheetData(data.rawSheetData);
+                setSharedMappingConfig(autoConfig);
+                setSharedImportFileName(data.fileName || 'Excel_Share_Sheet.xlsx');
+                if (Array.isArray(data.customers) && data.customers.length > 0) {
+                  setSharedImportData(data.customers);
+                }
+                setIsImportOpen(true);
+                showToast(`⚡ Data Excel (${data.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+              }
             }
-            if (Array.isArray(parsed.customers) && parsed.customers.length > 0) {
-              setSharedImportData(parsed.customers);
-            }
-            setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
-            setIsImportOpen(true);
-            showToast(`⚡ File Excel (${parsed.fileName || 'WhatsApp'}) berhasil diterima!`);
-            return;
+          } catch (fetchErr) {
+            console.error('Failed to fetch pending import by ID:', fetchErr);
           }
         }
 
-        // Check Service Worker cache from PWA Web Share Target API
+        // 2. Check localStorage raw shared payload fallback
+        const raw = localStorage.getItem('foto_studio_pending_shared_import');
+        if (raw) {
+          localStorage.removeItem('foto_studio_pending_shared_import');
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.rawSheetData) {
+              const autoConfig = autoDetectColumnMapping(parsed.rawSheetData.rawRows, parsed.rawSheetData.maxCols);
+              setSharedRawSheetData(parsed.rawSheetData);
+              setSharedMappingConfig(autoConfig);
+              setSharedImportFileName(parsed.fileName || 'Excel_WhatsApp.xlsx');
+              if (Array.isArray(parsed.customers) && parsed.customers.length > 0) {
+                setSharedImportData(parsed.customers);
+              }
+              setIsImportOpen(true);
+              showToast(`⚡ File Excel (${parsed.fileName || 'WhatsApp'}) berhasil diterima! Siap dipreview & diimpor.`);
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing raw shared import:', e);
+          }
+        }
+
+        // 3. Check Service Worker cache from PWA Web Share Target API
         if ('caches' in window) {
           const cache = await caches.open('shared-files-cache');
-          const response = await cache.match('/shared-excel-file');
-          if (response) {
-            const blob = await response.blob();
-            const file = new File([blob], 'Excel_Bagikan.xlsx', {
-              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          
+          // Check for cached binary Excel file
+          const excelResp = await cache.match('/shared-excel-file');
+          if (excelResp) {
+            const nameHeader = excelResp.headers.get('x-file-name');
+            const fileName = nameHeader ? decodeURIComponent(nameHeader) : 'Excel_Diterima.xlsx';
+            const blob = await excelResp.blob();
+            const file = new File([blob], fileName, {
+              type: excelResp.headers.get('content-type') || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             });
             const extracted = await extractRawExcelFromFile(file);
             await cache.delete('/shared-excel-file');
             if (extracted) {
               setSharedRawSheetData(extracted.rawSheetData);
               setSharedMappingConfig(extracted.mappingConfig);
-              setSharedImportFileName('Excel_Diterima.xlsx');
+              setSharedImportFileName(fileName);
               setIsImportOpen(true);
-              showToast(`⚡ File Excel dari WhatsApp/Share diterima! Siap dipreview & diimpor.`);
+              showToast(`⚡ File Excel (${fileName}) dari Share Sheet diterima! Siap dipreview & diimpor.`);
+              return;
             } else {
               const customers = await parseCustomerExcel(file);
               if (customers.length > 0) {
                 setSharedImportData(customers);
-                setSharedImportFileName('Excel_Diterima.xlsx');
+                setSharedImportFileName(fileName);
                 setIsImportOpen(true);
-                showToast(`⚡ File Excel dari WhatsApp berhasil diterima (${customers.length} customer)!`);
+                showToast(`⚡ File Excel (${fileName}) berhasil diterima (${customers.length} customer)!`);
+                return;
               }
             }
+          }
+
+          // Check for cached text list
+          const textResp = await cache.match('/shared-text-data');
+          if (textResp) {
+            const sharedText = await textResp.text();
+            await cache.delete('/shared-text-data');
+            if (sharedText && sharedText.trim()) {
+              const lines = sharedText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+              const parsedRows: string[][] = [];
+              lines.forEach((line) => {
+                if (line.includes('\t')) {
+                  parsedRows.push(line.split('\t').map((p) => p.trim()));
+                } else if (line.includes(';')) {
+                  parsedRows.push(line.split(';').map((p) => p.trim()));
+                } else {
+                  const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+                  if (numMatch && numMatch[2].trim()) {
+                    parsedRows.push([numMatch[1].trim(), numMatch[2].trim(), '', '']);
+                  } else {
+                    parsedRows.push(['', line, '', '']);
+                  }
+                }
+              });
+              const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
+              const rawSheetData = {
+                sheetName: 'Hasil_Share_WA',
+                rawRows: [header, ...parsedRows],
+                maxCols: 4,
+              };
+              const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
+              setSharedRawSheetData(rawSheetData);
+              setSharedMappingConfig(autoConfig);
+              setSharedImportFileName('Teks_Share_WA.txt');
+              setIsImportOpen(true);
+              showToast('⚡ Teks daftar customer dari Share Sheet diterima! Siap dipreview & diimpor.');
+              return;
+            }
+          }
+        }
+
+        // 4. Check Capacitor cold launch intent
+        if (isCapacitorNative()) {
+          const launchUrl = await CapacitorApp.getLaunchUrl();
+          if (launchUrl?.url) {
+            await processCapacitorShareUrl(launchUrl.url);
           }
         }
       } catch (e) {
@@ -161,64 +300,12 @@ export default function App() {
     checkPendingSharedImport();
     window.addEventListener('focus', checkPendingSharedImport);
 
-    // Listen for Capacitor Native App Url / File Open Intent from Android Share Sheet
+    // Listen for Capacitor Native App Url / File Open Intent on warm launch
     let capSub: any = null;
     if (isCapacitorNative()) {
       capSub = CapacitorApp.addListener('appUrlOpen', async (data) => {
         if (data?.url) {
-          try {
-            let blob: Blob;
-            const targetUrl = data.url;
-
-            if (targetUrl.startsWith('content://') || targetUrl.startsWith('file://')) {
-              try {
-                const convertedUrl = Capacitor.convertFileSrc(targetUrl);
-                const response = await fetch(convertedUrl);
-                blob = await response.blob();
-              } catch (convErr) {
-                // Fallback via Filesystem plugin
-                const fileData = await Filesystem.readFile({ path: targetUrl });
-                const base64Content = typeof fileData.data === 'string' ? fileData.data : '';
-                const byteCharacters = atob(base64Content);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                  byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                blob = new Blob([byteArray], {
-                  type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                });
-              }
-            } else {
-              const response = await fetch(targetUrl);
-              blob = await response.blob();
-            }
-
-            const file = new File([blob], 'Excel_Android_Share.xlsx', {
-              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            });
-            const extracted = await extractRawExcelFromFile(file);
-            if (extracted) {
-              setSharedRawSheetData(extracted.rawSheetData);
-              setSharedMappingConfig(extracted.mappingConfig);
-              setSharedImportFileName(file.name);
-              setIsImportOpen(true);
-              showToast('⚡ File Excel dari Share Android diterima! Siap dipreview & diimpor.');
-            } else {
-              const customers = await parseCustomerExcel(file);
-              if (customers.length > 0) {
-                setSharedImportData(customers);
-                setSharedImportFileName(file.name);
-                setIsImportOpen(true);
-                showToast(`⚡ File Excel dari Share Android diterima (${customers.length} customer)!`);
-              } else {
-                showToast('⚠️ File dari Share Sheet tidak memiliki data customer.');
-              }
-            }
-          } catch (err) {
-            console.error('Gagal memproses file dari Android Share Sheet:', err);
-            showToast('⚠️ Gagal membaca file dari Android Share Sheet.');
-          }
+          await processCapacitorShareUrl(data.url);
         }
       });
     }
