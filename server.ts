@@ -10,17 +10,62 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
 });
 
-// Temporary in-memory store for shared imports (expires after 30 mins)
+// Temporary store for shared imports with disk fallback
+const TEMP_SHARES_DIR = path.join(process.cwd(), ".tmp_shares");
+if (!fs.existsSync(TEMP_SHARES_DIR)) {
+  try { fs.mkdirSync(TEMP_SHARES_DIR, { recursive: true }); } catch (e) {}
+}
+
 const tempImportStore = new Map<string, { rawSheetData: any; fileName: string; customers: any[]; timestamp: number }>();
+
+function saveTempImport(id: string, payload: any) {
+  tempImportStore.set(id, payload);
+  try {
+    fs.writeFileSync(path.join(TEMP_SHARES_DIR, `${id}.json`), JSON.stringify(payload));
+  } catch (e) {
+    console.error("Failed to write temp share file:", e);
+  }
+}
+
+function getTempImport(id: string) {
+  if (tempImportStore.has(id)) {
+    return tempImportStore.get(id);
+  }
+  try {
+    const filePath = path.join(TEMP_SHARES_DIR, `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const parsed = JSON.parse(content);
+      tempImportStore.set(id, parsed);
+      return parsed;
+    }
+  } catch (e) {
+    console.error("Failed to read temp share file:", e);
+  }
+  return null;
+}
 
 function cleanupTempImports() {
   const now = Date.now();
   for (const [id, item] of tempImportStore.entries()) {
     if (now - item.timestamp > 30 * 60 * 1000) {
       tempImportStore.delete(id);
+      try {
+        const filePath = path.join(TEMP_SHARES_DIR, `${id}.json`);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch (e) {}
     }
   }
 }
+
+const safeMulterUpload = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  upload.any()(req, res, (err) => {
+    if (err) {
+      console.warn("Multer parse error (non-fatal, continuing):", err);
+    }
+    next();
+  });
+};
 
 async function startServer() {
   const app = express();
@@ -39,7 +84,7 @@ async function startServer() {
   app.get("/api/pending-import/:id", (req, res) => {
     cleanupTempImports();
     const id = req.params.id;
-    const data = tempImportStore.get(id);
+    const data = getTempImport(id);
     if (!data) {
       return res.status(404).json({ error: "Import data expired or not found" });
     }
@@ -192,7 +237,7 @@ async function startServer() {
         timestamp: Date.now(),
       };
 
-      tempImportStore.set(tempId, sharedPayload);
+      saveTempImport(tempId, sharedPayload);
 
       try {
         res.cookie('foto_studio_pending_import_id', tempId, {
@@ -220,9 +265,79 @@ async function startServer() {
     }
   };
 
-  app.post("/api/share-target", upload.any(), handleShareTargetRequest);
-  app.post("/share-target", upload.any(), handleShareTargetRequest);
-  app.post("/", upload.any(), handleShareTargetRequest);
+  app.get("/share-target", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const text = (req.query.text || req.query.title || req.query.url || "") as string;
+    if (text && text.trim().length > 0) {
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const parsedRows: string[][] = lines.map(line => {
+        if (line.includes('\t')) return line.split('\t').map(p => p.trim());
+        if (line.includes(';')) return line.split(';').map(p => p.trim());
+        const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+        if (numMatch && numMatch[2].trim()) {
+          return [numMatch[1].trim(), numMatch[2].trim(), '', ''];
+        }
+        return ['', line, '', ''];
+      });
+
+      const tempId = `share_get_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const sharedPayload = {
+        rawSheetData: {
+          sheetName: 'Hasil_Share_Teks',
+          rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'], ...parsedRows],
+          maxCols: 4,
+        },
+        fileName: 'Teks_Share_WA.txt',
+        customers: [],
+        tempId,
+        timestamp: Date.now(),
+      };
+      saveTempImport(tempId, sharedPayload);
+      return res.redirect(303, `/?shared_import_id=${tempId}&t=${Date.now()}`);
+    }
+    next();
+  });
+
+  app.post("/api/share-target", safeMulterUpload, handleShareTargetRequest);
+  app.post("/share-target", safeMulterUpload, handleShareTargetRequest);
+  app.post("/", safeMulterUpload, handleShareTargetRequest);
+
+  // HTML Payload Injector Middleware: directly inject window.__INITIAL_SHARED_DATA__ when redirected from share target
+  app.get(["/", "/index.html", "/share-target"], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const sharedId = (req.query.shared_import_id as string) || req.cookies?.foto_studio_pending_import_id;
+    if (!sharedId) {
+      return next();
+    }
+
+    const payload = getTempImport(sharedId);
+    if (!payload) {
+      return next();
+    }
+
+    try {
+      let htmlPath = path.join(process.cwd(), "index.html");
+      if (process.env.NODE_ENV === "production") {
+        htmlPath = path.join(process.cwd(), "dist", "index.html");
+      }
+
+      if (!fs.existsSync(htmlPath)) {
+        return next();
+      }
+
+      let html = fs.readFileSync(htmlPath, "utf-8");
+      if (process.env.NODE_ENV !== "production" && viteInstance) {
+        html = await viteInstance.transformIndexHtml(req.originalUrl, html);
+      }
+
+      const scriptToInject = `<script>window.__INITIAL_SHARED_DATA__ = ${JSON.stringify(payload).replace(/</g, '\\u003c')};</script>`;
+      html = html.replace("</head>", `${scriptToInject}\n</head>`);
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    } catch (e) {
+      console.error("Failed to inject initial shared data into HTML:", e);
+      return next();
+    }
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

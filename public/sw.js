@@ -7,12 +7,20 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// IMPORTANT: Do NOT intercept POST requests in Service Worker!
-// Letting POST requests bypass Service Worker allows Android Chrome Web Share Target
-// to stream multipart file uploads directly to the backend Express server without blank screen crashes.
+// Safely pass Web Share Target POST requests directly to the Express backend
 self.addEventListener('fetch', (event) => {
-  if (event.request.method === 'POST') {
-    return; // Direct pass-through to server
+  const url = new URL(event.request.url);
+
+  if (
+    event.request.method === 'POST' &&
+    (url.pathname.includes('share-target') || url.pathname === '/')
+  ) {
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.error('SW share_target POST error:', err);
+        return Response.redirect('/?share_error=true', 303);
+      })
+    );
   }
 });
 
