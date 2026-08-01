@@ -167,6 +167,37 @@ export default function App() {
 
     const checkPendingSharedImport = async () => {
       try {
+        // 0. Check Capacitor Local Database / Storage direct bridge
+        const capWindowData = (window as any).__CAPACITOR_SHARED_DATA__;
+        const capStorageData = localStorage.getItem('capacitor_shared_data') || localStorage.getItem('capacitor_shared_import');
+        const capPayload = capWindowData || (capStorageData ? JSON.parse(capStorageData) : null);
+
+        if (capPayload) {
+          try {
+            delete (window as any).__CAPACITOR_SHARED_DATA__;
+            localStorage.removeItem('capacitor_shared_data');
+            localStorage.removeItem('capacitor_shared_import');
+
+            if (capPayload.rawSheetData) {
+              const autoConfig = autoDetectColumnMapping(capPayload.rawSheetData.rawRows, capPayload.rawSheetData.maxCols);
+              setSharedRawSheetData(capPayload.rawSheetData);
+              setSharedMappingConfig(autoConfig);
+              setSharedImportFileName(capPayload.fileName || 'Capacitor_Share_Sheet.xlsx');
+              setIsImportOpen(true);
+              showToast(`⚡ Data dari Capacitor Native Local Storage (${capPayload.fileName || 'Share Sheet'}) berhasil diterima!`);
+              return;
+            } else if (Array.isArray(capPayload.customers) && capPayload.customers.length > 0) {
+              setSharedImportData(capPayload.customers);
+              setSharedImportFileName(capPayload.fileName || 'Capacitor_Share_Sheet.xlsx');
+              setIsImportOpen(true);
+              showToast(`⚡ Data (${capPayload.customers.length} customer) dari Capacitor Local Storage diterima!`);
+              return;
+            }
+          } catch (capErr) {
+            console.error('Error parsing Capacitor Local Storage data:', capErr);
+          }
+        }
+
         // 1. Check Service Worker cache from PWA Web Share Target API first
         if ('caches' in window) {
           try {
@@ -405,6 +436,8 @@ export default function App() {
 
     checkPendingSharedImport();
     window.addEventListener('focus', checkPendingSharedImport);
+    window.addEventListener('storage', checkPendingSharedImport);
+    window.addEventListener('capacitor_share_received', checkPendingSharedImport as any);
 
     // Listen for Capacitor Native App Url / File Open Intent on warm launch
     let capSub: any = null;
@@ -418,6 +451,8 @@ export default function App() {
 
     return () => {
       window.removeEventListener('focus', checkPendingSharedImport);
+      window.removeEventListener('storage', checkPendingSharedImport);
+      window.removeEventListener('capacitor_share_received', checkPendingSharedImport as any);
       if (capSub && typeof capSub.remove === 'function') {
         capSub.remove();
       }
