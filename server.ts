@@ -16,7 +16,32 @@ if (!fs.existsSync(TEMP_SHARES_DIR)) {
   try { fs.mkdirSync(TEMP_SHARES_DIR, { recursive: true }); } catch (e) {}
 }
 
-const tempImportStore = new Map<string, { rawSheetData: any; fileName: string; customers: any[]; timestamp: number }>();
+const tempImportStore = new Map<string, { rawSheetData: any; fileName: string; customers: any[]; timestamp: number; debugLog?: any; isWarningEmpty?: boolean }>();
+const shareDebugLogs: any[] = [];
+
+function addShareDebugLog(entry: any) {
+  shareDebugLogs.unshift(entry);
+  if (shareDebugLogs.length > 20) shareDebugLogs.pop();
+  try {
+    fs.writeFileSync(path.join(TEMP_SHARES_DIR, "debug_history.json"), JSON.stringify(shareDebugLogs, null, 2));
+  } catch (e) {}
+}
+
+function getShareDebugLogs() {
+  if (shareDebugLogs.length === 0) {
+    try {
+      const debugFile = path.join(TEMP_SHARES_DIR, "debug_history.json");
+      if (fs.existsSync(debugFile)) {
+        const content = fs.readFileSync(debugFile, "utf-8");
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          shareDebugLogs.push(...parsed);
+        }
+      }
+    } catch (e) {}
+  }
+  return shareDebugLogs;
+}
 
 function saveTempImport(id: string, payload: any) {
   tempImportStore.set(id, payload);
@@ -92,24 +117,62 @@ async function startServer() {
     res.json(data);
   });
 
+  // GET API to inspect Share Target debug logs for troubleshooting
+  app.get("/api/share-debug", (req, res) => {
+    const logs = getShareDebugLogs();
+    res.json({
+      status: "ok",
+      count: logs.length,
+      lastLog: logs[0] || null,
+      logs,
+    });
+  });
+
   // WEB SHARE TARGET API ENDPOINT (Receives Excel files or shared text from WhatsApp / Telegram / Share Sheet)
   const handleShareTargetRequest = (req: express.Request, res: express.Response) => {
+    const logId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const debugEntry: any = {
+      id: logId,
+      time: new Date().toLocaleTimeString('id-ID'),
+      isoTime: new Date().toISOString(),
+      method: req.method,
+      path: req.originalUrl || req.path,
+      contentType: req.headers['content-type'] || 'empty',
+      userAgent: req.headers['user-agent'] || 'unknown',
+      files: [],
+      bodyKeys: Object.keys(req.body || {}),
+      bodyTextSnippet: '',
+      status: 'PENDING',
+      details: ''
+    };
+
     try {
       cleanupTempImports();
       let file: Express.Multer.File | undefined;
 
-      if (Array.isArray(req.files) && req.files.length > 0) {
-        file = req.files[0];
+      let rawFilesList: Express.Multer.File[] = [];
+      if (Array.isArray(req.files)) {
+        rawFilesList = req.files;
       } else if (req.files && typeof req.files === 'object') {
         const filesObj = req.files as { [fieldname: string]: Express.Multer.File[] };
-        const allKeys = Object.keys(filesObj);
-        if (allKeys.length > 0 && filesObj[allKeys[0]]?.length > 0) {
-          file = filesObj[allKeys[0]][0];
-        }
+        Object.values(filesObj).forEach(arr => {
+          if (Array.isArray(arr)) rawFilesList.push(...arr);
+        });
+      }
+      if ((req as any).file) {
+        rawFilesList.push((req as any).file);
       }
 
-      if (!file && (req as any).file) {
-        file = (req as any).file;
+      debugEntry.files = rawFilesList.map(f => ({
+        fieldname: f.fieldname,
+        originalname: f.originalname,
+        mimetype: f.mimetype,
+        sizeBytes: f.size,
+        bufferLength: f.buffer ? f.buffer.length : 0
+      }));
+
+      if (rawFilesList.length > 0) {
+        file = rawFilesList[0];
       }
 
       let rawSheetData: any = null;
@@ -190,6 +253,8 @@ async function startServer() {
 
       // Check if text/URL was shared instead of binary file
       const sharedText = req.body?.text || req.body?.title || req.body?.url || '';
+      debugEntry.bodyTextSnippet = String(sharedText).slice(0, 150);
+
       if (!rawSheetData && sharedText && String(sharedText).trim().length > 0) {
         fileName = 'Teks_Share_WA.txt';
         const lines = String(sharedText).split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -216,18 +281,25 @@ async function startServer() {
         };
       }
 
+      const isDataReceived = Boolean(rawSheetData);
+
       if (!rawSheetData) {
-        // Fallback default sheet structure so the app always opens the import modal
+        // Diagnostic fallback
         rawSheetData = {
-          sheetName: 'File_Share_Diterima',
+          sheetName: 'Diagnostic_Share_Kosong',
           rawRows: [
             ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'],
+            ['', 'Panduan: Upload Manual File Excel Jika Share Intent Kosong', 'Troubleshoot', 'Gunakan Tombol Upload File Excel Manual'],
           ],
           maxCols: 4,
         };
+        debugEntry.status = 'WARNING_EMPTY';
+        debugEntry.details = 'Request POST dari Android Share Sheet diterima oleh server Express, tetapi tidak ada file atau teks terdeteksi di multipart body.';
+      } else {
+        debugEntry.status = 'SUCCESS';
+        debugEntry.details = `Berhasil menerima data (${fileName}), customer parsed: ${parsedCustomers.length}.`;
       }
 
-      // Store payload for GET fallback
       const tempId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const sharedPayload = {
         rawSheetData,
@@ -235,9 +307,12 @@ async function startServer() {
         customers: parsedCustomers,
         tempId,
         timestamp: Date.now(),
+        debugLog: debugEntry,
+        isWarningEmpty: !isDataReceived,
       };
 
       saveTempImport(tempId, sharedPayload);
+      addShareDebugLog(debugEntry);
 
       try {
         res.cookie('foto_studio_pending_import_id', tempId, {
@@ -254,14 +329,18 @@ async function startServer() {
           fileName,
           rawSheetData,
           customersCount: parsedCustomers.length,
+          debugLog: debugEntry,
         });
       }
 
-      // MUST return HTTP 303 See Other Redirect for Chrome Android Web Share Target POST
-      return res.redirect(303, `/?shared_import_id=${tempId}&t=${Date.now()}`);
+      const shareStatusParam = isDataReceived ? 'success' : 'warning_empty';
+      return res.redirect(303, `/?shared_import_id=${tempId}&share_status=${shareStatusParam}&t=${Date.now()}`);
     } catch (err: any) {
       console.error("Share target processing error:", err);
-      return res.redirect(303, "/?share_error=true");
+      debugEntry.status = 'ERROR';
+      debugEntry.details = `Error server: ${err?.message || err}`;
+      addShareDebugLog(debugEntry);
+      return res.redirect(303, `/?share_error=true&reason=${encodeURIComponent(err?.message || 'Server error')}`);
     }
   };
 

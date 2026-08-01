@@ -32,6 +32,8 @@ interface ImportExcelModalProps {
   initialRawSheetData?: RawExcelSheetData | null;
   initialMappingConfig?: ColumnMappingConfig | null;
   initialFileName?: string;
+  onOpenShareDebug?: () => void;
+  onOpenPasteText?: () => void;
 }
 
 function getColumnLetter(colIndex: number): string {
@@ -52,6 +54,8 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
   initialRawSheetData,
   initialMappingConfig,
   initialFileName,
+  onOpenShareDebug,
+  onOpenPasteText,
 }) => {
   const [rawSheetData, setRawSheetData] = useState<RawExcelSheetData | null>(null);
   const [mappingConfig, setMappingConfig] = useState<ColumnMappingConfig>({
@@ -283,12 +287,23 @@ export const ImportExcelModal: React.FC<ImportExcelModalProps> = ({
                 <Smartphone className="w-4 h-4 text-emerald-400" />
                 Petunjuk Menerima &amp; Impor File Excel di Android (APK)
               </span>
-              <button
-                onClick={() => setShowWhatsAppGuide(!showWhatsAppGuide)}
-                className="text-[11px] text-sky-400 hover:underline font-semibold cursor-pointer"
-              >
-                {showWhatsAppGuide ? 'Sembunyikan Petunjuk' : 'Lihat Petunjuk'}
-              </button>
+              <div className="flex items-center gap-2">
+                {onOpenShareDebug && (
+                  <button
+                    type="button"
+                    onClick={onOpenShareDebug}
+                    className="px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <span>🔍 Log Share Target</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowWhatsAppGuide(!showWhatsAppGuide)}
+                  className="text-[11px] text-sky-400 hover:underline font-semibold cursor-pointer"
+                >
+                  {showWhatsAppGuide ? 'Sembunyikan Petunjuk' : 'Lihat Petunjuk'}
+                </button>
+              </div>
             </div>
             {showWhatsAppGuide && (
               <div className="pt-2 border-t border-emerald-500/20 text-slate-300 space-y-2 text-[11px] leading-relaxed">

@@ -17,6 +17,8 @@ import {
   Save,
   X,
   Sliders,
+  Bug,
+  Smartphone,
 } from 'lucide-react';
 
 import { App as CapacitorApp } from '@capacitor/app';
@@ -61,6 +63,8 @@ import { ImportExcelModal } from './components/ImportExcelModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionModal } from './components/SessionModal';
 import { ExportShareModal } from './components/ExportShareModal';
+import { ShareDebugModal } from './components/ShareDebugModal';
+import { PasteTextModal } from './components/PasteTextModal';
 
 export type MainTabType = 'HOME' | 'CUSTOMER' | 'SESI' | 'REKAP' | 'SETTING';
 
@@ -80,6 +84,9 @@ export default function App() {
   const [isExportShareOpen, setIsExportShareOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [isShareDebugModalOpen, setIsShareDebugModalOpen] = useState(false);
+  const [isPasteTextModalOpen, setIsPasteTextModalOpen] = useState(false);
+  const [shareDebugData, setShareDebugData] = useState<any>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -269,6 +276,17 @@ export default function App() {
 
         // 3. Check server pending import ID via URL query, cookie, or localStorage
         const urlParams = new URLSearchParams(window.location.search);
+        const shareError = urlParams.get('share_error');
+        const shareStatus = urlParams.get('share_status');
+
+        if (shareError) {
+          setIsShareDebugModalOpen(true);
+          showToast('⚠️ Gagal/Terjadi kendala saat menerima file dari Share Sheet.');
+        } else if (shareStatus === 'warning_empty') {
+          setIsShareDebugModalOpen(true);
+          showToast('⚠️ Request Share Sheet diterima, tetapi Android tidak menyertakan attachment file.');
+        }
+
         const matchCookie = document.cookie.match(/(?:^|; )foto_studio_pending_import_id=([^;]*)/);
         const cookieTempId = matchCookie ? decodeURIComponent(matchCookie[1]) : null;
         if (cookieTempId) {
@@ -285,20 +303,27 @@ export default function App() {
             if (res.ok) {
               const data = await res.json();
               if (data) {
-                const sheetData = data.rawSheetData || {
-                  sheetName: 'File_Share_Diterima',
-                  rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
-                  maxCols: 4,
-                };
-                const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
-                setSharedRawSheetData(sheetData);
-                setSharedMappingConfig(autoConfig);
-                setSharedImportFileName(data.fileName || 'Excel_Share_Sheet.xlsx');
-                if (Array.isArray(data.customers) && data.customers.length > 0) {
-                  setSharedImportData(data.customers);
+                if (data.debugLog) {
+                  setShareDebugData(data.debugLog);
                 }
-                setIsImportOpen(true);
-                showToast(`⚡ Data Excel (${data.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+                if (data.isWarningEmpty) {
+                  setIsShareDebugModalOpen(true);
+                } else {
+                  const sheetData = data.rawSheetData || {
+                    sheetName: 'File_Share_Diterima',
+                    rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
+                    maxCols: 4,
+                  };
+                  const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
+                  setSharedRawSheetData(sheetData);
+                  setSharedMappingConfig(autoConfig);
+                  setSharedImportFileName(data.fileName || 'Excel_Share_Sheet.xlsx');
+                  if (Array.isArray(data.customers) && data.customers.length > 0) {
+                    setSharedImportData(data.customers);
+                  }
+                  setIsImportOpen(true);
+                  showToast(`⚡ Data Excel (${data.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+                }
                 window.history.replaceState({}, document.title, window.location.pathname);
                 return;
               }
@@ -884,6 +909,38 @@ export default function App() {
     showToast(`Berhasil mengimpor ${importedList.length} customer ke sesi ini!`);
   };
 
+  // HANDLE PASTED TEXT CUSTOMERS
+  const handleImportParsedText = (text: string) => {
+    const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+    const parsedRows: string[][] = [];
+    lines.forEach((line) => {
+      if (line.includes('\t')) {
+        parsedRows.push(line.split('\t').map((p) => p.trim()));
+      } else if (line.includes(';')) {
+        parsedRows.push(line.split(';').map((p) => p.trim()));
+      } else {
+        const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+        if (numMatch && numMatch[2].trim()) {
+          parsedRows.push([numMatch[1].trim(), numMatch[2].trim(), '', '']);
+        } else {
+          parsedRows.push(['', line, '', '']);
+        }
+      }
+    });
+    const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
+    const rawSheetData = {
+      sheetName: 'Hasil_Paste_Teks',
+      rawRows: [header, ...parsedRows],
+      maxCols: 4,
+    };
+    const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
+    setSharedRawSheetData(rawSheetData);
+    setSharedMappingConfig(autoConfig);
+    setSharedImportFileName('Teks_Dipaste.txt');
+    setIsImportOpen(true);
+    showToast('⚡ Teks customer berhasil diproses! Siap dipreview & diimpor.');
+  };
+
   // DELETE PHOTO
   const handleDeletePhoto = (photoId: string) => {
     setPhotos((prev) => prev.filter((p) => p.id !== photoId));
@@ -1047,11 +1104,21 @@ export default function App() {
             {/* Import Excel */}
             <button
               onClick={() => setIsImportOpen(true)}
-              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors"
+              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
               title="Import Data Customer dari Excel"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span className="hidden lg:inline">Import</span>
+            </button>
+
+            {/* Share Target Debug / Diagnostic button */}
+            <button
+              onClick={() => setIsShareDebugModalOpen(true)}
+              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+              title="Cek Status & Log Diagnostik Share Target PWA"
+            >
+              <Bug className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Diagnostik Share</span>
             </button>
 
             {/* Export / Share */}
@@ -1540,6 +1607,8 @@ export default function App() {
         initialRawSheetData={sharedRawSheetData}
         initialMappingConfig={sharedMappingConfig}
         initialFileName={sharedImportFileName}
+        onOpenShareDebug={() => setIsShareDebugModalOpen(true)}
+        onOpenPasteText={() => setIsPasteTextModalOpen(true)}
       />
 
       <SettingsModal
@@ -1560,6 +1629,22 @@ export default function App() {
         photos={sessionPhotos}
         customers={sessionCustomers}
         activeSession={activeSession}
+      />
+
+      <ShareDebugModal
+        isOpen={isShareDebugModalOpen}
+        onClose={() => setIsShareDebugModalOpen(false)}
+        serverLog={shareDebugData}
+        onManualPasteClick={() => {
+          setIsShareDebugModalOpen(false);
+          setIsPasteTextModalOpen(true);
+        }}
+      />
+
+      <PasteTextModal
+        isOpen={isPasteTextModalOpen}
+        onClose={() => setIsPasteTextModalOpen(false)}
+        onImportParsedText={handleImportParsedText}
       />
 
       {/* Global File Drag Overlay (Share Intent Catching Zone) */}
