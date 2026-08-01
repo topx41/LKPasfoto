@@ -194,6 +194,14 @@ async function startServer() {
 
       tempImportStore.set(tempId, sharedPayload);
 
+      try {
+        res.cookie('foto_studio_pending_import_id', tempId, {
+          path: '/',
+          maxAge: 10 * 60 * 1000, // 10 mins
+          sameSite: 'lax',
+        });
+      } catch (e) {}
+
       if (req.headers.accept?.includes('application/json') || req.xhr) {
         return res.json({
           success: true,

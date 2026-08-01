@@ -267,9 +267,15 @@ export default function App() {
           }
         }
 
-        // 3. Check server pending import ID via URL query or localStorage
+        // 3. Check server pending import ID via URL query, cookie, or localStorage
         const urlParams = new URLSearchParams(window.location.search);
-        const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id');
+        const matchCookie = document.cookie.match(/(?:^|; )foto_studio_pending_import_id=([^;]*)/);
+        const cookieTempId = matchCookie ? decodeURIComponent(matchCookie[1]) : null;
+        if (cookieTempId) {
+          document.cookie = 'foto_studio_pending_import_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        }
+
+        const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id') || cookieTempId;
         const isShareQuery = urlParams.get('shared_import') || urlParams.get('imported_share') || urlParams.get('imported_text_share');
 
         if (tempId) {
