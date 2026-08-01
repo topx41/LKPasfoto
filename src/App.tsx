@@ -253,20 +253,28 @@ export default function App() {
           try {
             delete (window as any).__INITIAL_SHARED_DATA__;
             localStorage.removeItem('foto_studio_pending_import_id');
-            const sheetData = initialSharedData.rawSheetData || {
-              sheetName: 'File_Share_Diterima',
-              rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
-              maxCols: 4,
-            };
-            const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
-            setSharedRawSheetData(sheetData);
-            setSharedMappingConfig(autoConfig);
-            setSharedImportFileName(initialSharedData.fileName || 'Excel_Share_Sheet.xlsx');
-            if (Array.isArray(initialSharedData.customers) && initialSharedData.customers.length > 0) {
-              setSharedImportData(initialSharedData.customers);
+            if (initialSharedData.debugLog) {
+              setShareDebugData(initialSharedData.debugLog);
             }
-            setIsImportOpen(true);
-            showToast(`⚡ Data Excel (${initialSharedData.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+            if (initialSharedData.isWarningEmpty) {
+              setIsShareDebugModalOpen(true);
+              showToast('⚠️ Request Share Sheet diterima, tetapi Android tidak mengirimkan attachment file.');
+            } else {
+              const sheetData = initialSharedData.rawSheetData || {
+                sheetName: 'File_Share_Diterima',
+                rawRows: [['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan']],
+                maxCols: 4,
+              };
+              const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
+              setSharedRawSheetData(sheetData);
+              setSharedMappingConfig(autoConfig);
+              setSharedImportFileName(initialSharedData.fileName || 'Excel_Share_Sheet.xlsx');
+              if (Array.isArray(initialSharedData.customers) && initialSharedData.customers.length > 0) {
+                setSharedImportData(initialSharedData.customers);
+              }
+              setIsImportOpen(true);
+              showToast(`⚡ Data Excel (${initialSharedData.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+            }
             window.history.replaceState({}, document.title, window.location.pathname);
             return;
           } catch (initErr) {
@@ -337,6 +345,24 @@ export default function App() {
           setIsImportOpen(true);
           showToast('⚡ Aplikasi dibuka dari Share Sheet! Silakan pilih / periksa data customer.');
           window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        // 4. Auto check recent server share debug log (if within last 3 minutes and was empty/error)
+        try {
+          const debugRes = await fetch('/api/share-debug');
+          if (debugRes.ok) {
+            const debugJson = await debugRes.json();
+            if (debugJson.lastLog) {
+              setShareDebugData(debugJson.lastLog);
+              const logTime = new Date(debugJson.lastLog.isoTime || 0).getTime();
+              const isRecent = Date.now() - logTime < 3 * 60 * 1000;
+              if (isRecent && (debugJson.lastLog.status === 'WARNING_EMPTY' || debugJson.lastLog.status === 'ERROR')) {
+                setIsShareDebugModalOpen(true);
+              }
+            }
+          }
+        } catch (debugErr) {
+          console.error('Failed to auto check share debug log:', debugErr);
         }
 
         // 4. Check localStorage raw shared payload fallback
@@ -1634,8 +1660,12 @@ export default function App() {
       <ShareDebugModal
         isOpen={isShareDebugModalOpen}
         onClose={() => setIsShareDebugModalOpen(false)}
-        serverLog={shareDebugData}
-        onManualPasteClick={() => {
+        initialDebugLog={shareDebugData}
+        onOpenManualUpload={() => {
+          setIsShareDebugModalOpen(false);
+          setIsImportOpen(true);
+        }}
+        onOpenPasteText={() => {
           setIsShareDebugModalOpen(false);
           setIsPasteTextModalOpen(true);
         }}
