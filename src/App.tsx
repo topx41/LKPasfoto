@@ -160,7 +160,87 @@ export default function App() {
 
     const checkPendingSharedImport = async () => {
       try {
-        // 0. Check inlined server payload injected directly into window.__INITIAL_SHARED_DATA__ on POST /share-target
+        // 1. Check Service Worker cache from PWA Web Share Target API first
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open('shared-files-cache');
+
+            // Check for cached binary Excel file
+            const excelResp = await cache.match('/shared-excel-file');
+            if (excelResp) {
+              const nameHeader = excelResp.headers.get('x-file-name');
+              const fileName = nameHeader ? decodeURIComponent(nameHeader) : 'Excel_Diterima.xlsx';
+              const blob = await excelResp.blob();
+              const file = new File([blob], fileName, {
+                type: excelResp.headers.get('content-type') || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              });
+              const extracted = await extractRawExcelFromFile(file);
+              await cache.delete('/shared-excel-file');
+              if (extracted) {
+                setSharedRawSheetData(extracted.rawSheetData);
+                setSharedMappingConfig(extracted.mappingConfig);
+                setSharedImportFileName(fileName);
+                setIsImportOpen(true);
+                showToast(`⚡ File Excel (${fileName}) dari Share Sheet berhasil diterima! Siap dipreview & diimpor.`);
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+              } else {
+                const customers = await parseCustomerExcel(file);
+                if (customers.length > 0) {
+                  setSharedImportData(customers);
+                  setSharedImportFileName(fileName);
+                  setIsImportOpen(true);
+                  showToast(`⚡ File Excel (${fileName}) berhasil diterima (${customers.length} customer)!`);
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                  return;
+                }
+              }
+            }
+
+            // Check for cached text list
+            const textResp = await cache.match('/shared-text-data');
+            if (textResp) {
+              const sharedText = await textResp.text();
+              await cache.delete('/shared-text-data');
+              if (sharedText && sharedText.trim()) {
+                const lines = sharedText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+                const parsedRows: string[][] = [];
+                lines.forEach((line) => {
+                  if (line.includes('\t')) {
+                    parsedRows.push(line.split('\t').map((p) => p.trim()));
+                  } else if (line.includes(';')) {
+                    parsedRows.push(line.split(';').map((p) => p.trim()));
+                  } else {
+                    const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
+                    if (numMatch && numMatch[2].trim()) {
+                      parsedRows.push([numMatch[1].trim(), numMatch[2].trim(), '', '']);
+                    } else {
+                      parsedRows.push(['', line, '', '']);
+                    }
+                  }
+                });
+                const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
+                const rawSheetData = {
+                  sheetName: 'Hasil_Share_WA',
+                  rawRows: [header, ...parsedRows],
+                  maxCols: 4,
+                };
+                const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
+                setSharedRawSheetData(rawSheetData);
+                setSharedMappingConfig(autoConfig);
+                setSharedImportFileName('Teks_Share_WA.txt');
+                setIsImportOpen(true);
+                showToast('⚡ Teks daftar customer dari Share Sheet diterima! Siap dipreview & diimpor.');
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+              }
+            }
+          } catch (cacheErr) {
+            console.error('Error checking SW cache:', cacheErr);
+          }
+        }
+
+        // 2. Check inlined server payload injected directly into window.__INITIAL_SHARED_DATA__
         const initialSharedData = (window as any).__INITIAL_SHARED_DATA__;
         if (initialSharedData) {
           try {
@@ -187,11 +267,11 @@ export default function App() {
           }
         }
 
-        // 1. Check server pending import ID via URL query or localStorage
+        // 3. Check server pending import ID via URL query or localStorage
         const urlParams = new URLSearchParams(window.location.search);
         const tempId = urlParams.get('shared_import_id') || localStorage.getItem('foto_studio_pending_import_id');
         const isShareQuery = urlParams.get('shared_import') || urlParams.get('imported_share') || urlParams.get('imported_text_share');
-        
+
         if (tempId) {
           localStorage.removeItem('foto_studio_pending_import_id');
           try {
@@ -228,7 +308,7 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // 2. Check localStorage raw shared payload fallback
+        // 4. Check localStorage raw shared payload fallback
         const raw = localStorage.getItem('foto_studio_pending_shared_import');
         if (raw) {
           localStorage.removeItem('foto_studio_pending_shared_import');
@@ -248,79 +328,6 @@ export default function App() {
             }
           } catch (e) {
             console.error('Error parsing raw shared import:', e);
-          }
-        }
-
-        // 3. Check Service Worker cache from PWA Web Share Target API
-        if ('caches' in window) {
-          const cache = await caches.open('shared-files-cache');
-          
-          // Check for cached binary Excel file
-          const excelResp = await cache.match('/shared-excel-file');
-          if (excelResp) {
-            const nameHeader = excelResp.headers.get('x-file-name');
-            const fileName = nameHeader ? decodeURIComponent(nameHeader) : 'Excel_Diterima.xlsx';
-            const blob = await excelResp.blob();
-            const file = new File([blob], fileName, {
-              type: excelResp.headers.get('content-type') || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            });
-            const extracted = await extractRawExcelFromFile(file);
-            await cache.delete('/shared-excel-file');
-            if (extracted) {
-              setSharedRawSheetData(extracted.rawSheetData);
-              setSharedMappingConfig(extracted.mappingConfig);
-              setSharedImportFileName(fileName);
-              setIsImportOpen(true);
-              showToast(`⚡ File Excel (${fileName}) dari Share Sheet diterima! Siap dipreview & diimpor.`);
-              return;
-            } else {
-              const customers = await parseCustomerExcel(file);
-              if (customers.length > 0) {
-                setSharedImportData(customers);
-                setSharedImportFileName(fileName);
-                setIsImportOpen(true);
-                showToast(`⚡ File Excel (${fileName}) berhasil diterima (${customers.length} customer)!`);
-                return;
-              }
-            }
-          }
-
-          // Check for cached text list
-          const textResp = await cache.match('/shared-text-data');
-          if (textResp) {
-            const sharedText = await textResp.text();
-            await cache.delete('/shared-text-data');
-            if (sharedText && sharedText.trim()) {
-              const lines = sharedText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
-              const parsedRows: string[][] = [];
-              lines.forEach((line) => {
-                if (line.includes('\t')) {
-                  parsedRows.push(line.split('\t').map((p) => p.trim()));
-                } else if (line.includes(';')) {
-                  parsedRows.push(line.split(';').map((p) => p.trim()));
-                } else {
-                  const numMatch = line.match(/^(\d+|[A-Za-z0-9_-]+)[\s.|\-)\]]+(.*)$/);
-                  if (numMatch && numMatch[2].trim()) {
-                    parsedRows.push([numMatch[1].trim(), numMatch[2].trim(), '', '']);
-                  } else {
-                    parsedRows.push(['', line, '', '']);
-                  }
-                }
-              });
-              const header = ['Nomor Absen', 'Nama Customer', 'Kategori', 'Catatan'];
-              const rawSheetData = {
-                sheetName: 'Hasil_Share_WA',
-                rawRows: [header, ...parsedRows],
-                maxCols: 4,
-              };
-              const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
-              setSharedRawSheetData(rawSheetData);
-              setSharedMappingConfig(autoConfig);
-              setSharedImportFileName('Teks_Share_WA.txt');
-              setIsImportOpen(true);
-              showToast('⚡ Teks daftar customer dari Share Sheet diterima! Siap dipreview & diimpor.');
-              return;
-            }
           }
         }
 
