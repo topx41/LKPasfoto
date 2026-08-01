@@ -256,7 +256,10 @@ export default function App() {
             if (initialSharedData.debugLog) {
               setShareDebugData(initialSharedData.debugLog);
             }
-            if (initialSharedData.isWarningEmpty) {
+            if (initialSharedData.isError) {
+              setIsShareDebugModalOpen(true);
+              showToast(`⚠️ Error Share Sheet: ${initialSharedData.errorMessage || 'Terjadi kesalahan server.'}`);
+            } else if (initialSharedData.isWarningEmpty) {
               setIsShareDebugModalOpen(true);
               showToast('⚠️ Request Share Sheet diterima, tetapi Android tidak mengirimkan attachment file.');
             } else {

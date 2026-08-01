@@ -128,6 +128,33 @@ async function startServer() {
     });
   });
 
+  async function renderAppHtmlWithPayload(req: express.Request, res: express.Response, payload: any) {
+    try {
+      let htmlPath = path.join(process.cwd(), "index.html");
+      if (process.env.NODE_ENV === "production") {
+        htmlPath = path.join(process.cwd(), "dist", "index.html");
+      }
+
+      if (!fs.existsSync(htmlPath)) {
+        return res.status(500).send("Index HTML file not found");
+      }
+
+      let html = fs.readFileSync(htmlPath, "utf-8");
+      if (process.env.NODE_ENV !== "production" && viteInstance) {
+        html = await viteInstance.transformIndexHtml(req.originalUrl || "/", html);
+      }
+
+      const scriptToInject = `<script>window.__INITIAL_SHARED_DATA__ = ${JSON.stringify(payload).replace(/</g, '\\u003c')};</script>`;
+      html = html.replace("</head>", `${scriptToInject}\n</head>`);
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    } catch (e: any) {
+      console.error("Failed to render app HTML with payload:", e);
+      return res.status(500).send("Server Error Rendering App");
+    }
+  }
+
   // WEB SHARE TARGET API ENDPOINT (Receives Excel files or shared text from WhatsApp / Telegram / Share Sheet)
   const handleShareTargetRequest = (req: express.Request, res: express.Response) => {
     const logId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -322,7 +349,7 @@ async function startServer() {
         });
       } catch (e) {}
 
-      if (req.headers.accept?.includes('application/json') || req.xhr) {
+      if (req.headers.accept?.includes('application/json') || req.xhr || req.path.startsWith('/api/')) {
         return res.json({
           success: true,
           tempId,
@@ -333,18 +360,26 @@ async function startServer() {
         });
       }
 
-      const shareStatusParam = isDataReceived ? 'success' : 'warning_empty';
-      return res.redirect(303, `/?shared_import_id=${tempId}&share_status=${shareStatusParam}&t=${Date.now()}`);
+      // Directly render 200 OK HTML with inlined window.__INITIAL_SHARED_DATA__
+      // This eliminates 303 Redirects which cause blank screen crashes on Android Chrome WebAPK Share Target
+      return renderAppHtmlWithPayload(req, res, sharedPayload);
     } catch (err: any) {
       console.error("Share target processing error:", err);
       debugEntry.status = 'ERROR';
       debugEntry.details = `Error server: ${err?.message || err}`;
       addShareDebugLog(debugEntry);
-      return res.redirect(303, `/?share_error=true&reason=${encodeURIComponent(err?.message || 'Server error')}`);
+
+      const errorPayload = {
+        isError: true,
+        errorMessage: err?.message || 'Server error',
+        debugLog: debugEntry,
+        timestamp: Date.now(),
+      };
+      return renderAppHtmlWithPayload(req, res, errorPayload);
     }
   };
 
-  app.get("/share-target", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.get("/share-target", async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const text = (req.query.text || req.query.title || req.query.url || "") as string;
     if (text && text.trim().length > 0) {
       const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -371,7 +406,7 @@ async function startServer() {
         timestamp: Date.now(),
       };
       saveTempImport(tempId, sharedPayload);
-      return res.redirect(303, `/?shared_import_id=${tempId}&t=${Date.now()}`);
+      return renderAppHtmlWithPayload(req, res, sharedPayload);
     }
     next();
   });
