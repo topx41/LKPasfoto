@@ -204,8 +204,8 @@ async function startServer() {
         });
       }
 
-      // Render full HTML app directly into the Share Target activity response (no redirects!)
-      return renderAppWithSharedData(req, res, sharedPayload);
+      // MUST return HTTP 303 See Other Redirect for Chrome Android Web Share Target POST
+      return res.redirect(303, `/?shared_import_id=${tempId}&t=${Date.now()}`);
     } catch (err: any) {
       console.error("Share target processing error:", err);
       return res.redirect(303, "/?share_error=true");
@@ -215,34 +215,6 @@ async function startServer() {
   app.post("/api/share-target", upload.any(), handleShareTargetRequest);
   app.post("/share-target", upload.any(), handleShareTargetRequest);
   app.post("/", upload.any(), handleShareTargetRequest);
-
-  // Helper to serve index.html with inlined shared data
-  async function renderAppWithSharedData(req: express.Request, res: express.Response, sharedPayload: any) {
-    try {
-      const indexPath = process.env.NODE_ENV !== "production"
-        ? path.join(process.cwd(), "index.html")
-        : path.join(process.cwd(), "dist", "index.html");
-
-      let html = fs.readFileSync(indexPath, "utf-8");
-
-      if (viteInstance) {
-        html = await viteInstance.transformIndexHtml(req.originalUrl || "/", html);
-      }
-
-      const payloadScript = `<script>
-        window.__INITIAL_SHARED_DATA__ = ${JSON.stringify(sharedPayload)};
-        try {
-          localStorage.setItem('foto_studio_pending_import_id', ${JSON.stringify(sharedPayload.tempId)});
-        } catch(e) {}
-      </script>`;
-
-      html = html.replace("</head>", `${payloadScript}\n</head>`);
-      return res.status(200).set("Content-Type", "text/html").send(html);
-    } catch (renderErr) {
-      console.error("Error serving index.html for share target:", renderErr);
-      return res.redirect(303, `/?shared_import_id=${sharedPayload.tempId}&t=${Date.now()}`);
-    }
-  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
