@@ -459,6 +459,43 @@ export default function App() {
     };
   }, [showToast]);
 
+  // Capture unhandled runtime crashes or promise rejections to diagnose page blank/close
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      const errorInfo = {
+        message: event.message || 'Window Runtime Error',
+        filename: event.filename || '',
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error?.stack || '',
+        time: new Date().toLocaleTimeString('id-ID'),
+        type: 'RUNTIME_ERROR'
+      };
+      try {
+        localStorage.setItem('last_app_crash_log', JSON.stringify(errorInfo));
+      } catch (e) {}
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const errorInfo = {
+        message: String(event.reason?.message || event.reason || 'Unhandled Promise Rejection'),
+        stack: event.reason?.stack || '',
+        time: new Date().toLocaleTimeString('id-ID'),
+        type: 'PROMISE_REJECTION'
+      };
+      try {
+        localStorage.setItem('last_app_crash_log', JSON.stringify(errorInfo));
+      } catch (e) {}
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   // Handle Global Drag and Drop File anywhere on window
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {

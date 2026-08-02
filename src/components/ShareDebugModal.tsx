@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, AlertTriangle, CheckCircle2, Info, RefreshCw, Copy, Check, 
-  Upload, FileText, Smartphone, Server, HelpCircle, ShieldAlert, Zap, Play
+  Upload, FileText, Smartphone, Server, HelpCircle, ShieldAlert, Zap, Play,
+  Share2, FileSpreadsheet, Cpu, Sliders, Database, Layers
 } from 'lucide-react';
 
 interface ShareDebugModalProps {
@@ -30,6 +31,69 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
     isPwaStandalone: false,
     canShare: false,
   });
+
+  const handleShareReportLog = async () => {
+    const lastCrashLog = localStorage.getItem('last_app_crash_log');
+    let parsedCrash = null;
+    try {
+      if (lastCrashLog) parsedCrash = JSON.parse(lastCrashLog);
+    } catch (e) {}
+
+    const diagnosticReport = `
+========================================
+📋 FOTO STUDIO - DIAGNOSTIC LOG & TRACING REPORT
+========================================
+Waktu Report: ${new Date().toLocaleString('id-ID')}
+Mode Web: ${pwaStatus.isPwaStandalone ? 'PWA Standalone (Installed)' : 'Browser Standard (Web)'}
+Service Worker: ${pwaStatus.swRegistered ? 'Aktif' : 'Bypassed/Inaktif'}
+User Agent: ${navigator.userAgent}
+
+----------------------------------------
+📡 REKAMAN LOG SERVER EXPRESS TERAKHIR:
+ID Request: ${serverLog?.id || '-'}
+Waktu: ${serverLog?.time || '-'}
+Path/Endpoint: ${serverLog?.path || '-'}
+Method: ${serverLog?.method || '-'}
+Status: ${serverLog?.status || 'Belum Ada Log'}
+Detail Server: ${serverLog?.details || '-'}
+Files Received: ${JSON.stringify(serverLog?.files || [])}
+Body Snippet: ${serverLog?.bodyTextSnippet || '-'}
+
+----------------------------------------
+💥 LOG CRASH CLIENT TERAKHIR (PAGE BLANK/CLOSE):
+${parsedCrash ? JSON.stringify(parsedCrash, null, 2) : 'Tidak terdeteksi crash runtime React window.'}
+
+----------------------------------------
+📍 TRACING ALUR JOURNEY DATA EXCEL:
+1. File Sourcing (WhatsApp/File Mgr): OK
+2. Android Intent Receiver: ${serverLog?.path ? 'OK' : 'Waiting'}
+3. Server Multer & XLSX Parsing: ${serverLog?.status || 'Pending'}
+4. Modal Pemetaan Column Mapping: ${serverLog?.status === 'SUCCESS' ? 'Ready' : 'Waiting'}
+5. Integration DB Customer: ${serverLog?.status === 'SUCCESS' ? 'Ready' : 'Waiting'}
+========================================
+    `.trim();
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Diagnostic Log Error - Foto Studio App',
+          text: diagnosticReport,
+        });
+        return;
+      } catch (e) {
+        // user cancelled or share failed
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(diagnosticReport);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+      alert('📋 Report Log Error disalin ke Clipboard! Anda dapat membagikannya langsung ke WhatsApp.');
+    } catch (err) {
+      alert('Gagal menyalin log.');
+    }
+  };
 
   const fetchServerDebugLog = async () => {
     setLoading(true);
@@ -193,6 +257,73 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
             </div>
           )}
 
+          {/* Interactive Data Tracing Pipeline */}
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-sky-400" />
+                Tracing Alur Perjalanan Data Excel
+              </h4>
+              <span className="text-[11px] text-slate-400 font-mono">5 Tahap Eksekusi</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1">
+              {/* Step 1 */}
+              <div className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-between transition-all ${
+                serverLog ? 'bg-slate-900 border-emerald-500/50 text-emerald-300' : 'bg-slate-900/50 border-slate-800 text-slate-400'
+              }`}>
+                <div className="text-[10px] font-bold opacity-75">1. SOURCE</div>
+                <FileSpreadsheet className="w-5 h-5 my-1.5 text-sky-400" />
+                <div className="text-[11px] font-semibold">WA / Manager</div>
+                <div className="text-[9px] mt-0.5 text-slate-400">Excel / Teks</div>
+              </div>
+
+              {/* Step 2 */}
+              <div className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-between transition-all ${
+                serverLog?.path ? 'bg-slate-900 border-emerald-500/50 text-emerald-300' : 'bg-slate-900/50 border-slate-800 text-slate-400'
+              }`}>
+                <div className="text-[10px] font-bold opacity-75">2. INTENT</div>
+                <Smartphone className="w-5 h-5 my-1.5 text-amber-400" />
+                <div className="text-[11px] font-semibold">Android Intent</div>
+                <div className="text-[9px] mt-0.5 text-slate-400">PWA / Capacitor</div>
+              </div>
+
+              {/* Step 3 */}
+              <div className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-between transition-all ${
+                serverLog?.status === 'SUCCESS' 
+                  ? 'bg-slate-900 border-emerald-500/50 text-emerald-300'
+                  : isWarningEmpty 
+                  ? 'bg-slate-900 border-amber-500/50 text-amber-300'
+                  : 'bg-slate-900/50 border-slate-800 text-slate-400'
+              }`}>
+                <div className="text-[10px] font-bold opacity-75">3. PARSING</div>
+                <Cpu className="w-5 h-5 my-1.5 text-indigo-400" />
+                <div className="text-[11px] font-semibold">Server / Worker</div>
+                <div className="text-[9px] mt-0.5 text-slate-400">Multer & XLSX</div>
+              </div>
+
+              {/* Step 4 */}
+              <div className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-between transition-all ${
+                serverLog?.status === 'SUCCESS' ? 'bg-slate-900 border-emerald-500/50 text-emerald-300' : 'bg-slate-900/50 border-slate-800 text-slate-400'
+              }`}>
+                <div className="text-[10px] font-bold opacity-75">4. MAPPING</div>
+                <Sliders className="w-5 h-5 my-1.5 text-emerald-400" />
+                <div className="text-[11px] font-semibold">Pemetaan Modal</div>
+                <div className="text-[9px] mt-0.5 text-slate-400">Baris & Kolom</div>
+              </div>
+
+              {/* Step 5 */}
+              <div className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-between transition-all ${
+                serverLog?.status === 'SUCCESS' ? 'bg-slate-900 border-emerald-500/50 text-emerald-300' : 'bg-slate-900/50 border-slate-800 text-slate-400'
+              }`}>
+                <div className="text-[10px] font-bold opacity-75">5. DATABASE</div>
+                <Database className="w-5 h-5 my-1.5 text-teal-400" />
+                <div className="text-[11px] font-semibold">DB Customer</div>
+                <div className="text-[9px] mt-0.5 text-slate-400">React State</div>
+              </div>
+            </div>
+          </div>
+
           {/* Client & PWA Health Checklist */}
           <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 space-y-2">
             <div className="text-xs font-semibold tracking-wider text-slate-400 uppercase flex items-center justify-between">
@@ -200,7 +331,7 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
               <button
                 onClick={fetchServerDebugLog}
                 disabled={loading}
-                className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50"
+                className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50 cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh Log</span>
@@ -288,34 +419,27 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
           <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/40 space-y-3">
             <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
               <HelpCircle className="w-4 h-4 text-sky-400" />
-              Mengapa Log Server Menunjukkan "Belum Ada Log"?
+              Mengapa Page Blank & Close Saat Terima Share di Capacitor Native?
             </h4>
             
-            {!pwaStatus.isPwaStandalone && (
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
-                <div className="font-semibold flex items-center gap-1.5 text-amber-300">
-                  <Smartphone className="w-4 h-4 text-amber-400" />
-                  Mode Browser: Standard Web (Belum Di-Install sebagai PWA)
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  Android Share Sheet <strong>hanya dapat mendeteksi dan mengirim file ke aplikasi web</strong> jika aplikasi ini sudah <strong>di-Install ke Home Screen Android</strong> sebagai PWA.
-                </p>
-                <div className="pt-1 text-[11px] text-amber-300 font-medium">
-                  👉 Cara Install: Buka Chrome di HP → Klik menu titik tiga (⋮) → Pilih <strong>"Instal aplikasi"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.
-                </div>
-              </div>
-            )}
-
             <ul className="text-xs text-slate-300 space-y-2 list-disc list-inside leading-relaxed">
               <li>
-                <strong>Mode PWA/WebAPK Installed:</strong> Saat file di-share dari WhatsApp, Android akan mengarahkan request ke <code className="text-sky-300 bg-slate-800 px-1 rounded">/share-target</code> di server dan log request akan langsung tercatat.
+                <strong>Out of Memory pada Mobile WebView:</strong> Parsing file Excel biner ukuran besar secara sinkron di thread utama WebView dapat menyebabkan heap RAM meluap, sehingga OS Android secara paksa menutup halaman (Blank & Close).
               </li>
               <li>
-                <strong>Restriksi Sistem Android ROM (MIUI / Samsung / Realme):</strong> Jika file di-share via Android Share Sheet namun permission file dibatasi oleh ROM, Android hanya akan membuka layar aplikasi tanpa mengirimkan isi attachment file.
+                <strong>URI Akses Terisolasi (<code className="text-amber-300 bg-slate-800 px-1 rounded">content://</code>):</strong> WhatsApp memberikan URI bertanda izin khusus. Jika Android ROM (MIUI, Samsung OneUI) memblokir stream baca file, intent akan gagal mengekstrak bytes.
               </li>
             </ul>
 
             <div className="pt-2 border-t border-slate-700/50 space-y-2">
+              <button
+                onClick={handleShareReportLog}
+                className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-600/20 transition-all cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-sky-200" />
+                <span>📤 Bagikan Detail Log Error & Tracing (Share Sheet ke WhatsApp)</span>
+              </button>
+
               <button
                 onClick={handleSimulateShare}
                 disabled={simulating}
