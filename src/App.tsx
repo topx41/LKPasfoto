@@ -186,7 +186,39 @@ export default function App() {
             localStorage.removeItem('capacitor_shared_data');
             localStorage.removeItem('capacitor_shared_import');
 
-            if (capPayload.rawSheetData) {
+            if (capPayload.base64) {
+              const byteCharacters = atob(capPayload.base64);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const fn = capPayload.fileName || 'Android_Share_Sheet.xlsx';
+              const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const file = new File([blob], fn, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const extracted = await extractRawExcelFromFile(file);
+              if (extracted) {
+                setSharedRawSheetData(extracted.rawSheetData);
+                setSharedMappingConfig(extracted.mappingConfig);
+                setSharedImportFileName(fn);
+                setThankYouFileName(fn);
+                setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+                setIsThankYouModalOpen(true);
+                showToast(`⚡ Terima Kasih! File Excel (${fn}) dari Android Native Share Sheet diterima di Node 1.`);
+                return;
+              } else {
+                const customers = await parseCustomerExcel(file);
+                if (customers.length > 0) {
+                  setSharedImportData(customers);
+                  setSharedImportFileName(fn);
+                  setThankYouFileName(fn);
+                  setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+                  setIsThankYouModalOpen(true);
+                  showToast(`⚡ Terima Kasih! File Excel (${fn}) berhasil diterima (${customers.length} customer).`);
+                  return;
+                }
+              }
+            } else if (capPayload.rawSheetData) {
               const autoConfig = autoDetectColumnMapping(capPayload.rawSheetData.rawRows, capPayload.rawSheetData.maxCols);
               setSharedRawSheetData(capPayload.rawSheetData);
               setSharedMappingConfig(autoConfig);
