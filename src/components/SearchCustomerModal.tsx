@@ -277,10 +277,10 @@ export const SearchCustomerModal: React.FC<SearchCustomerModalProps> = ({
           </form>
         )}
 
-        {/* Customer List Result */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {/* Customer List Result - Table/List View */}
+        <div className="flex-1 overflow-y-auto">
           {filteredCustomers.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 space-y-2">
+            <div className="py-12 text-center text-slate-400 space-y-2">
               <User className="w-10 h-10 mx-auto opacity-30" />
               <p className="text-sm">Tidak menemukan customer "{query}"</p>
               <button
@@ -295,113 +295,136 @@ export const SearchCustomerModal: React.FC<SearchCustomerModalProps> = ({
               </button>
             </div>
           ) : (
-            filteredCustomers.map((c) => {
-              const isActive = c.id === activeCustomerId;
-              const isSelected = selectedCustomerIds.includes(c.id);
-              const absence = c.absenceNumber || c.code;
+            <div>
+              {/* List Table Header */}
+              <div className="px-3 py-2 bg-slate-950/80 border-b border-slate-800/80 text-[11px] font-bold text-slate-400 flex items-center justify-between uppercase tracking-wider sticky top-0 z-10">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <span className="w-4 shrink-0 text-center">Edit</span>
+                  <span className="w-4 shrink-0 text-center">Cek</span>
+                  <span className="w-12 text-center shrink-0">Absen</span>
+                  <span>Nama Customer</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="hidden sm:inline">Foto</span>
+                  <span>Status</span>
+                  <span className="w-6 text-center">Aksi</span>
+                </div>
+              </div>
 
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => {
-                    onSelectCustomer(c);
-                    onClose();
-                  }}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between group ${
-                    isSelected
-                      ? 'bg-rose-500/10 border-rose-500/40 text-slate-100'
-                      : isActive
-                      ? 'bg-sky-500/15 border-sky-500/50 text-slate-100 shadow-sm'
-                      : 'bg-slate-800/40 hover:bg-slate-800 border-slate-800/80 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {/* EDIT BUTTON ON FAR LEFT */}
-                    {onUpdateCustomer && (
-                      <button
-                        onClick={(e) => handleStartEditCustomer(c, e)}
-                        title="Edit Data Customer (Paling Kiri)"
-                        className="p-1.5 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded-lg transition-colors shrink-0"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+              {/* List Rows */}
+              <div className="divide-y divide-slate-800/60">
+                {filteredCustomers.map((c, index) => {
+                  const isActive = c.id === activeCustomerId;
+                  const isSelected = selectedCustomerIds.includes(c.id);
+                  const absence = c.absenceNumber || c.code;
 
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => handleToggleSelect(c.id, e)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer shrink-0"
-                    />
-
+                  return (
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${
-                        isActive
-                          ? 'bg-sky-500 text-white'
-                          : c.status === 'completed'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700 text-slate-300'
+                      key={c.id}
+                      onClick={() => {
+                        onSelectCustomer(c);
+                        onClose();
+                      }}
+                      className={`py-2.5 px-3 flex items-center justify-between gap-2.5 cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-rose-500/10 text-slate-100'
+                          : isActive
+                          ? 'bg-sky-500/15 text-slate-100 font-bold'
+                          : index % 2 === 0
+                          ? 'bg-slate-900/40 hover:bg-slate-800/80 text-slate-200'
+                          : 'bg-slate-950/40 hover:bg-slate-800/80 text-slate-200'
                       }`}
                     >
-                      {c.name.charAt(0).toUpperCase()}
-                    </div>
+                      {/* Left side: Edit, Checkbox, Absen, Name */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {/* EDIT BUTTON ON FAR LEFT */}
+                        {onUpdateCustomer ? (
+                          <button
+                            onClick={(e) => handleStartEditCustomer(c, e)}
+                            title="Edit Data Customer (Paling Kiri)"
+                            className="p-1 text-sky-400 hover:text-sky-300 hover:bg-sky-500/20 rounded-md transition-colors shrink-0"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <div className="w-5 shrink-0" />
+                        )}
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm truncate text-slate-100">
-                          {c.name}
-                        </span>
-                        {absence && (
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Absen #{absence}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleToggleSelect(c.id, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer shrink-0"
+                        />
+
+                        {/* Absen / ID Badge */}
+                        {absence ? (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] sm:text-xs border border-amber-500/30 shrink-0 text-center min-w-[36px]">
+                            #{absence}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 font-mono text-[10px] shrink-0 text-center min-w-[36px]">
+                            #-
                           </span>
                         )}
+
+                        {/* Name & Category */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-xs sm:text-sm break-words leading-tight text-slate-100">
+                              {c.name}
+                            </span>
+                            {c.category && (
+                              <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">
+                                {c.category}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                        {c.category && <span>{c.category}</span>}
-                        <span className="flex items-center gap-1 text-sky-400 font-mono">
-                          📷 {c.photoCount} foto
+
+                      {/* Right side: Foto Count, Status, Delete */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-sky-400 font-mono font-bold shrink-0 hidden sm:inline">
+                          📷 {c.photoCount}
                         </span>
+
+                        {isActive ? (
+                          <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-sky-500 text-slate-950 flex items-center gap-1 shrink-0">
+                            <UserCheck className="w-3 h-3" />
+                            <span>Aktif</span>
+                          </span>
+                        ) : c.status === 'completed' ? (
+                          <span className="text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Selesai</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3" />
+                            <span>Antrean</span>
+                          </span>
+                        )}
+
+                        {onDeleteCustomer && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCustomer(c.id);
+                            }}
+                            title="Hapus Customer Ini"
+                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Actions & Status */}
-                  <div className="flex items-center gap-2 shrink-0 pl-2">
-                    {isActive ? (
-                      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-sky-500 text-slate-950 font-bold shadow-sm">
-                        <UserCheck className="w-3.5 h-3.5" />
-                        Aktif
-                      </span>
-                    ) : c.status === 'completed' ? (
-                      <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Selesai
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                        <Clock className="w-3.5 h-3.5" />
-                        Antrean
-                      </span>
-                    )}
-
-                    {onDeleteCustomer && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteCustomer(c.id);
-                        }}
-                        title="Hapus Customer Ini"
-                        className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
 

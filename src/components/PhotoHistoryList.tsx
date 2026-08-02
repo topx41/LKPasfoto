@@ -159,11 +159,9 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
             <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
               <th className="py-2.5 px-3 w-12 text-center">Edit</th>
               <th className="py-2.5 px-3 w-10 text-center">No</th>
-              <th className="py-2.5 px-3">Nama Customer</th>
+              <th className="py-2.5 px-3">Nama Customer &amp; Keterangan</th>
               <th className="py-2.5 px-3">No. Absen / ID</th>
-              <th className="py-2.5 px-3">File Kamera</th>
               <th className="py-2.5 px-3 w-16 text-center">Tandai</th>
-              <th className="py-2.5 px-3">Keterangan</th>
               <th className="py-2.5 px-3 text-right">Hapus</th>
             </tr>
           </thead>
@@ -194,9 +192,16 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                     {idx + 1}
                   </td>
 
-                  {/* Nama Customer */}
-                  <td className="py-2.5 px-3 font-bold text-slate-100">
-                    {photo.customerName}
+                  {/* Nama Customer & Keterangan di bawahnya */}
+                  <td className="py-2.5 px-3">
+                    <div className="font-bold text-slate-100 text-xs sm:text-sm">
+                      {photo.customerName}
+                    </div>
+                    {photo.notes ? (
+                      <p className="text-[11px] text-amber-300/90 italic mt-0.5 leading-tight font-normal">
+                        💬 {photo.notes}
+                      </p>
+                    ) : null}
                   </td>
 
                   {/* Absence Number */}
@@ -208,18 +213,6 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                     ) : (
                       <span className="text-slate-500 italic text-[11px]">-</span>
                     )}
-                  </td>
-
-                  {/* File Kamera */}
-                  <td className="py-2.5 px-3">
-                    <button
-                      onClick={() => setSelectedPhoto(photo)}
-                      title="Klik untuk pratinjau foto"
-                      className="font-mono font-bold text-sky-400 hover:text-sky-300 hover:underline bg-slate-950 px-2 py-1 rounded border border-slate-800 text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <Eye className="w-3 h-3 text-slate-400" />
-                      <span>{photo.fileName}</span>
-                    </button>
                   </td>
 
                   {/* Tandai Button */}
@@ -235,11 +228,6 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                     >
                       <Star className={`w-3.5 h-3.5 ${photo.isMarked ? 'fill-slate-950' : ''}`} />
                     </button>
-                  </td>
-
-                  {/* Keterangan */}
-                  <td className="py-2.5 px-3 text-slate-300 italic max-w-[160px] truncate">
-                    {photo.notes ? `💬 ${photo.notes}` : <span className="text-slate-600 font-sans not-italic">-</span>}
                   </td>
 
                   {/* Hapus Action */}
@@ -276,7 +264,7 @@ export const PhotoHistoryList: React.FC<PhotoHistoryListProps> = ({
                 {photos.length}
               </span>
             </h3>
-            <p className="text-[11px] text-slate-400">Pencatatan Nama, No. Absen, File Kamera, Tandai & Keterangan</p>
+            <p className="text-[11px] text-slate-400">Pencatatan Nama, No. Absen, Tandai &amp; Keterangan (di bawah nama)</p>
           </div>
         </div>
 

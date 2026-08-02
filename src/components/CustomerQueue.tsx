@@ -272,10 +272,10 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
 
           {activeCustomer ? (
             <div className="p-3 bg-gradient-to-r from-sky-950/60 via-slate-900 to-slate-900 border border-sky-500/40 rounded-xl shadow-md space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-slate-100 truncate">{activeCustomer.name}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-sm text-slate-100 break-words flex-1 min-w-0 leading-snug">{activeCustomer.name}</span>
                 {(activeCustomer.absenceNumber || activeCustomer.code) && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                     Absen #{activeCustomer.absenceNumber || activeCustomer.code}
                   </span>
                 )}
@@ -314,72 +314,87 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
             </button>
           </div>
 
-          <div className="space-y-1.5">
+          <div>
             {pendingCustomers.length === 0 ? (
-              <p className="text-slate-500 italic text-[11px] py-2 text-center">
+              <p className="text-slate-500 italic text-[11px] py-2 text-center bg-slate-950/30 rounded-xl border border-slate-800">
                 Tidak ada antrean tersisa
               </p>
             ) : (
-              frontPendingCustomers.map((c) => {
-                const absence = c.absenceNumber || c.code;
-                const isSelected = selectedCustomerIds.includes(c.id);
+              <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 bg-slate-950/40">
+                {frontPendingCustomers.map((c, idx) => {
+                  const absence = c.absenceNumber || c.code;
+                  const isSelected = selectedCustomerIds.includes(c.id);
 
-                return (
-                  <div
-                    key={c.id}
-                    onClick={() => onSelectCustomer(c)}
-                    className={`p-2.5 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${
-                      isSelected
-                        ? 'bg-rose-500/10 border-rose-500/50'
-                        : 'bg-slate-800/40 hover:bg-slate-800 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 pr-2">
-                      {/* EDIT BUTTON ON FAR LEFT */}
-                      {onUpdateCustomer && (
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => onSelectCustomer(c)}
+                      className={`py-2 px-2.5 cursor-pointer flex items-center justify-between gap-2 transition-colors group ${
+                        isSelected
+                          ? 'bg-rose-500/10'
+                          : idx % 2 === 0
+                          ? 'bg-slate-900/40 hover:bg-slate-800/80'
+                          : 'bg-slate-950/40 hover:bg-slate-800/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {/* EDIT BUTTON ON FAR LEFT */}
+                        {onUpdateCustomer && (
+                          <button
+                            onClick={(e) => handleStartEditCustomer(c, e)}
+                            title="Edit Customer (Paling Kiri)"
+                            className="p-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded transition-colors shrink-0"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleToggleSelectCustomer(c.id, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-3.5 h-3.5 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer shrink-0"
+                        />
+
+                        {/* Absen Badge */}
+                        {absence ? (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 shrink-0 text-center">
+                            #{absence}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 font-mono text-[10px] shrink-0 text-center">
+                            #-
+                          </span>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-200 text-xs break-words leading-tight group-hover:text-sky-400">
+                            {c.name}
+                          </p>
+                          {c.category && (
+                            <p className="text-[10px] text-slate-400">{c.category}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={(e) => handleStartEditCustomer(c, e)}
-                          title="Edit Customer (Paling Kiri)"
-                          className="p-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded-lg transition-colors shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteCustomer(c.id);
+                          }}
+                          title="Hapus Customer"
+                          className="p-1 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
-
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => handleToggleSelectCustomer(c.id, e)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-3.5 h-3.5 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer shrink-0"
-                      />
-
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-200 truncate group-hover:text-sky-400">
-                          {c.name}
-                        </p>
-                        <p className="text-[10px] text-amber-300 font-mono">
-                          {absence ? `Absen #${absence}` : c.category || 'Customer Studio'}
-                        </p>
+                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300" />
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteCustomer(c.id);
-                        }}
-                        title="Hapus Customer"
-                        className="p-1 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                      <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300" />
-                    </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
 
             {/* Button Lihat Record Lainnya if > 10 */}
@@ -397,7 +412,7 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
           </div>
         </div>
 
-        {/* Completed Customers (WITH ABSEN COLUMN / BADGE) */}
+        {/* Completed Customers (LIST VIEW FORMAT) */}
         {completedCustomers.length > 0 && (
           <div>
             <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
@@ -407,22 +422,24 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
               </span>
               <span className="text-[10px] text-slate-400 font-mono">Dilengkapi No. Absen</span>
             </div>
-            <div className="space-y-1">
-              {completedCustomers.slice(0, 10).map((c) => {
+            <div className="border border-emerald-500/20 rounded-xl overflow-hidden divide-y divide-emerald-500/10 bg-emerald-950/20">
+              {completedCustomers.slice(0, 10).map((c, idx) => {
                 const absence = c.absenceNumber || c.code;
                 return (
                   <div
                     key={c.id}
                     onClick={() => onSelectCustomer(c)}
-                    className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-slate-200 flex items-center justify-between text-[11px] cursor-pointer hover:bg-emerald-500/20 transition-all group"
+                    className={`py-2 px-2.5 text-slate-200 flex items-center justify-between text-[11px] cursor-pointer transition-colors group ${
+                      idx % 2 === 0 ? 'bg-emerald-500/5 hover:bg-emerald-500/15' : 'bg-emerald-500/10 hover:bg-emerald-500/20'
+                    }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                    <div className="flex items-center gap-2 min-w-0 pr-2 flex-1">
                       {/* EDIT BUTTON ON FAR LEFT FOR COMPLETED CUSTOMERS */}
                       {onUpdateCustomer && (
                         <button
                           onClick={(e) => handleStartEditCustomer(c, e)}
                           title="Edit Customer (Paling Kiri)"
-                          className="p-1 bg-slate-900/60 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded-lg transition-colors shrink-0"
+                          className="p-1 bg-slate-900/60 hover:bg-sky-500 text-sky-400 hover:text-slate-950 rounded transition-colors shrink-0"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
@@ -430,20 +447,20 @@ export const CustomerQueue: React.FC<CustomerQueueProps> = ({
 
                       {/* ABSEN COLUMN / BADGE */}
                       {absence ? (
-                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 shrink-0">
-                          Absen #{absence}
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 shrink-0">
+                          #{absence}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-500 font-mono text-[10px] shrink-0">
-                          No. Absen: -
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 font-mono text-[10px] shrink-0">
+                          #-
                         </span>
                       )}
 
-                      <span className="truncate font-bold text-slate-100">{c.name}</span>
+                      <span className="break-words font-semibold text-slate-100 flex-1 min-w-0 leading-tight">{c.name}</span>
                     </div>
 
                     <span className="text-[10px] text-emerald-300 font-mono font-bold shrink-0 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                      📷 {c.photoCount} foto
+                      📷 {c.photoCount}
                     </span>
                   </div>
                 );

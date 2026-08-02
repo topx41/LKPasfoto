@@ -117,6 +117,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <option value={3}>3 Digit (001, 002...)</option>
                 <option value={4}>4 Digit (0001, 0002...)</option>
                 <option value={5}>5 Digit (00001...)</option>
+                <option value={6}>6 Digit (000001...)</option>
+                <option value={7}>7 Digit (0000001...)</option>
+                <option value={8}>8 Digit (00000001...)</option>
               </select>
             </div>
           </div>

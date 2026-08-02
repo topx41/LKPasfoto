@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Camera,
+  Aperture,
   Settings,
   FileSpreadsheet,
   Share2,
@@ -85,6 +86,11 @@ export default function App() {
   const [isExportShareOpen, setIsExportShareOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [isSessionModalCreateMode, setIsSessionModalCreateMode] = useState(false);
+  const [sessionTabSearchQuery, setSessionTabSearchQuery] = useState('');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionName, setEditSessionName] = useState('');
+  const [editSessionNotes, setEditSessionNotes] = useState('');
   const [isShareDebugModalOpen, setIsShareDebugModalOpen] = useState(false);
   const [isPasteTextModalOpen, setIsPasteTextModalOpen] = useState(false);
   const [isThankYouModalOpen, setIsThankYouModalOpen] = useState(false);
@@ -100,11 +106,6 @@ export default function App() {
   const [sharedMappingConfig, setSharedMappingConfig] = useState<ColumnMappingConfig | null>(null);
   const [sharedImportFileName, setSharedImportFileName] = useState<string>('');
   const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
-
-  // Editing session state in SESI tab
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editSessionName, setEditSessionName] = useState<string>('');
-  const [editSessionNotes, setEditSessionNotes] = useState<string>('');
 
   // Toast Helper
   const showToast = useCallback((msg: string) => {
@@ -673,6 +674,37 @@ export default function App() {
     return sessions.find((s) => s.id === activeSessionId) || sessions[0] || DEFAULT_SESSIONS[0];
   }, [sessions, activeSessionId]);
 
+  // Session Modal helpers
+  const handleOpenCreateSessionModal = () => {
+    setIsSessionModalCreateMode(true);
+    setIsSessionModalOpen(true);
+  };
+
+  const handleOpenSessionListModal = () => {
+    setIsSessionModalCreateMode(false);
+    setIsSessionModalOpen(true);
+  };
+
+  // Filtered Sessions for the SESI tab
+  const filteredSessionsForTab = useMemo(() => {
+    const q = sessionTabSearchQuery.toLowerCase().trim();
+    if (!q) return sessions;
+    return sessions.filter((s) => {
+      const matchSess =
+        s.name.toLowerCase().includes(q) ||
+        (s.prefix && s.prefix.toLowerCase().includes(q)) ||
+        (s.notes && s.notes.toLowerCase().includes(q)) ||
+        (s.date && s.date.includes(q));
+      if (matchSess) return true;
+      const sessCusts = customers.filter((c) => c.sessionId === s.id);
+      return sessCusts.some(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.queueNumber && c.queueNumber.toLowerCase().includes(q))
+      );
+    });
+  }, [sessions, sessionTabSearchQuery, customers]);
+
   // Sync state to storage
   useEffect(() => {
     saveSessions(sessions);
@@ -1183,15 +1215,26 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           {/* Logo & App Title */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 shrink-0">
-              <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="relative group shrink-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-400 via-blue-500 to-indigo-600 p-0.5 shadow-lg shadow-sky-500/25">
+                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-sky-500/20 to-blue-400/20" />
+                  <Aperture className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400 relative z-10 transition-transform group-hover:rotate-45" />
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+              </div>
             </div>
             <div>
-              <h1 className="font-bold text-sm sm:text-base md:text-lg text-slate-100 leading-tight truncate max-w-[120px] sm:max-w-none">
-                Liankhay Capture
-              </h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-extrabold text-sm sm:text-base md:text-lg text-slate-100 leading-tight tracking-tight">
+                  Liankhay Capture
+                </h1>
+                <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-mono font-bold border border-sky-500/30">
+                  STUDIO
+                </span>
+              </div>
               <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block">
-                Rekap Foto Studio • No. Absen & File Kamera
+                Rekap Foto Studio • No. Absen &amp; File Kamera
               </p>
             </div>
           </div>
@@ -1272,8 +1315,8 @@ export default function App() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* SESSION SELECTOR PILL */}
             <button
-              onClick={() => setIsSessionModalOpen(true)}
-              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 rounded-lg text-[11px] sm:text-xs font-bold text-sky-300 flex items-center gap-1.5 shadow-sm transition-all"
+              onClick={handleOpenSessionListModal}
+              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 rounded-lg text-[11px] sm:text-xs font-bold text-sky-300 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
               title="Klik untuk Kelola / Ganti Sesi Foto"
             >
               <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
@@ -1290,16 +1333,6 @@ export default function App() {
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span className="hidden lg:inline">Import</span>
-            </button>
-
-            {/* Share Target Debug / Diagnostic button */}
-            <button
-              onClick={() => setIsShareDebugModalOpen(true)}
-              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-              title="Cek Status & Log Diagnostik Share Target PWA"
-            >
-              <Bug className="w-3.5 h-3.5" />
-              <span className="hidden xl:inline">Diagnostik Share</span>
             </button>
 
             {/* Export / Share */}
@@ -1323,7 +1356,7 @@ export default function App() {
             <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 font-semibold border border-sky-500/30 shrink-0 text-[10px] sm:text-xs">
               Customer:
             </span>
-            <span className="font-bold text-xs sm:text-sm text-slate-100 truncate max-w-[120px] sm:max-w-xs">
+            <span className="font-bold text-xs sm:text-sm text-slate-100 break-words leading-tight max-w-[180px] sm:max-w-sm">
               {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
             </span>
             {activeCustomer?.category && (
@@ -1368,7 +1401,7 @@ export default function App() {
               settings={settings}
               onNextCustomer={handleNextCustomer}
               onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenSettings={() => setIsSessionModalOpen(true)}
+              onOpenSettings={handleOpenSessionListModal}
               onResetCounter={handleResetSessionCounter}
               totalCapturedToday={sessionPhotos.length}
             />
@@ -1414,132 +1447,216 @@ export default function App() {
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
                   <FolderKanban className="w-5 h-5 text-sky-400" />
-                  <span>Daftar &amp; Manajemen Sesi Foto Studio</span>
+                  <span>Managemen Sesi Foto</span>
                 </h2>
                 <p className="text-xs text-slate-400">Total {sessions.length} sesi foto tersimpan di aplikasi</p>
               </div>
               <button
-                onClick={() => setIsSessionModalOpen(true)}
-                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow"
+                onClick={handleOpenCreateSessionModal}
+                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition-all"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Buat Sesi Baru</span>
               </button>
             </div>
 
-            {/* List of Sessions */}
-            <div className="grid grid-cols-1 gap-2.5">
-              {sessions.map((session) => {
-                const isCurrent = session.id === activeSessionId;
-                const isEditing = editingSessionId === session.id;
+            {/* SEARCH INPUT BAR ON SESI TAB */}
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari sesi foto, prefix, catatan, atau customer..."
+                value={sessionTabSearchQuery}
+                onChange={(e) => setSessionTabSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs rounded-xl focus:outline-none focus:border-sky-500 transition-colors"
+              />
+              {sessionTabSearchQuery && (
+                <button
+                  onClick={() => setSessionTabSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
-                return (
-                  <div
-                    key={session.id}
-                    className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
-                      isCurrent
-                        ? 'bg-sky-950/40 border-sky-500/50 shadow-md shadow-sky-500/10'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                    }`}
+            {/* List of Sessions in List Table Format */}
+            <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
+              {filteredSessionsForTab.length === 0 ? (
+                <div className="p-8 text-center space-y-2">
+                  <FolderKanban className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-sm font-semibold text-slate-300">Sesi tidak ditemukan</p>
+                  <p className="text-xs text-slate-500">
+                    Tidak ada sesi yang cocok dengan kata kunci "{sessionTabSearchQuery}"
+                  </p>
+                  <button
+                    onClick={() => setSessionTabSearchQuery('')}
+                    className="mt-2 text-xs text-sky-400 hover:underline font-medium cursor-pointer"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editSessionName}
-                            onChange={(e) => setEditSessionName(e.target.value)}
-                            className="px-2 py-1 bg-slate-900 border border-sky-500 rounded text-xs font-bold text-slate-100"
-                          />
-                        ) : (
-                          <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                            {session.name}
-                            {isCurrent && (
-                              <span className="px-2 py-0.5 rounded-full bg-sky-500 text-slate-950 font-extrabold text-[10px] flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" />
-                                AKTIF
-                              </span>
+                    Reset Pencarian
+                  </button>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-950/90 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+                      <th className="py-2.5 px-3 w-10 text-center">No</th>
+                      <th className="py-2.5 px-3">Nama Sesi &amp; Catatan</th>
+                      <th className="py-2.5 px-3">Prefix &amp; Counter</th>
+                      <th className="py-2.5 px-3">Customer &amp; Foto</th>
+                      <th className="py-2.5 px-3 text-right">Status / Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {filteredSessionsForTab.map((session, idx) => {
+                      const isCurrent = session.id === activeSessionId;
+                      const isEditing = editingSessionId === session.id;
+                      const sessionCustsCount = customers.filter((c) => c.sessionId === session.id).length;
+                      const sessionPhotosCount = photos.filter((p) => p.sessionId === session.id).length;
+
+                      return (
+                        <tr
+                          key={session.id}
+                          className={`hover:bg-slate-800/40 transition-colors ${
+                            isCurrent ? 'bg-sky-950/30' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-3 text-center text-slate-500 font-mono font-medium">
+                            {idx + 1}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            {isEditing ? (
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  value={editSessionName}
+                                  onChange={(e) => setEditSessionName(e.target.value)}
+                                  className="w-full px-2.5 py-1 bg-slate-900 border border-sky-500 rounded text-xs font-bold text-slate-100"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Catatan..."
+                                  value={editSessionNotes}
+                                  onChange={(e) => setEditSessionNotes(e.target.value)}
+                                  className="w-full px-2.5 py-1 bg-slate-900 border border-slate-700 rounded text-[11px] text-slate-200"
+                                />
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="font-bold text-slate-100 text-sm flex items-center gap-2">
+                                  <span>{session.name}</span>
+                                  {isCurrent && (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-extrabold text-[10px] flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      AKTIF
+                                    </span>
+                                  )}
+                                </div>
+                                {session.notes ? (
+                                  <p className="text-[11px] text-amber-300/90 italic mt-0.5">💬 {session.notes}</p>
+                                ) : (
+                                  <p className="text-[10px] text-slate-500 font-mono">Tgl: {session.date}</p>
+                                )}
+                              </div>
                             )}
-                          </h3>
-                        )}
+                          </td>
 
-                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 font-mono text-[10px] rounded border border-slate-700">
-                          Prefix: <strong className="text-sky-400">{session.prefix || 'STUDIO_'}</strong>
-                        </span>
+                          <td className="py-3 px-3">
+                            <div className="flex flex-col gap-1 text-[11px]">
+                              <span className="font-mono text-sky-400">
+                                Prefix: <strong className="text-slate-200">{session.prefix || 'STUDIO_'}</strong>
+                              </span>
+                              <span className="font-mono text-amber-300">
+                                Counter: <strong className="text-slate-200">#{formatFileNumber(session.currentNumber || 1, session.numberDigitCount || settings.digits)}</strong> ({session.numberDigitCount || settings.digits} Digit)
+                              </span>
+                            </div>
+                          </td>
 
-                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 font-mono text-[10px] rounded border border-slate-700">
-                          No: <strong className="text-amber-300">#{formatFileNumber(session.currentNumber || 1, settings.digits)}</strong>
-                        </span>
-                      </div>
-                    </div>
+                          <td className="py-3 px-3 text-[11px] text-slate-300">
+                            <div className="flex flex-col gap-0.5 font-mono">
+                              <span>👥 {sessionCustsCount} Customer</span>
+                              <span className="text-sky-400">📷 {sessionPhotosCount} Foto</span>
+                            </div>
+                          </td>
 
-                    <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
-                      {isEditing ? (
-                        <>
-                          <button
-                            onClick={() => {
-                              if (editSessionName.trim()) {
-                                handleUpdateSession(session.id, { name: editSessionName, notes: editSessionNotes });
-                                setEditingSessionId(null);
-                              }
-                            }}
-                            className="p-1.5 bg-emerald-500 text-slate-950 rounded-lg font-bold text-xs flex items-center gap-1"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Simpan</span>
-                          </button>
-                          <button
-                            onClick={() => setEditingSessionId(null)}
-                            className="p-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {!isCurrent && (
-                            <button
-                              onClick={() => {
-                                handleSelectSession(session.id);
-                                showToast(`Dipilih sesi: ${session.name}`);
-                              }}
-                              className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              Pilih Sesi Ini
-                            </button>
-                          )}
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      if (editSessionName.trim()) {
+                                        handleUpdateSession(session.id, { name: editSessionName, notes: editSessionNotes });
+                                        setEditingSessionId(null);
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-500 text-slate-950 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Save className="w-3.5 h-3.5" />
+                                    <span>Simpan</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingSessionId(null)}
+                                    className="p-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs cursor-pointer"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {!isCurrent ? (
+                                    <button
+                                      onClick={() => {
+                                        handleSelectSession(session.id);
+                                        showToast(`Dipilih sesi: ${session.name}`);
+                                      }}
+                                      className="px-3 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                                    >
+                                      Pilih Sesi
+                                    </button>
+                                  ) : (
+                                    <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold flex items-center gap-1">
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Aktif</span>
+                                    </span>
+                                  )}
 
-                          <button
-                            onClick={() => {
-                              setEditingSessionId(session.id);
-                              setEditSessionName(session.name);
-                              setEditSessionNotes(session.notes || '');
-                            }}
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                            title="Edit Sesi"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingSessionId(session.id);
+                                      setEditSessionName(session.name);
+                                      setEditSessionNotes(session.notes || '');
+                                    }}
+                                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                    title="Edit Sesi"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
 
-                          {sessions.length > 1 && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`Hapus sesi "${session.name}" beserta datanya?`)) {
-                                  handleDeleteSession(session.id);
-                                }
-                              }}
-                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors"
-                              title="Hapus Sesi"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                                  {sessions.length > 1 && (
+                                    <button
+                                      onClick={() => {
+                                        if (confirm(`Hapus sesi "${session.name}" beserta datanya?`)) {
+                                          handleDeleteSession(session.id);
+                                        }
+                                      }}
+                                      className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                      title="Hapus Sesi"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
@@ -1597,9 +1714,13 @@ export default function App() {
                     onChange={(e) => setSettings({ ...settings, digits: parseInt(e.target.value) || 3 })}
                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-mono focus:outline-none focus:border-sky-500"
                   >
-                    <option value={2}>2 Digit (01, 02, 03...)</option>
-                    <option value={3}>3 Digit (001, 002, 003...)</option>
-                    <option value={4}>4 Digit (0001, 0002, 0003...)</option>
+                    <option value={2}>2 Digit (01, 02...)</option>
+                    <option value={3}>3 Digit (001, 002...)</option>
+                    <option value={4}>4 Digit (0001, 0002...)</option>
+                    <option value={5}>5 Digit (00001...)</option>
+                    <option value={6}>6 Digit (000001...)</option>
+                    <option value={7}>7 Digit (0000001...)</option>
+                    <option value={8}>8 Digit (00000001...)</option>
                   </select>
                 </div>
               </div>
@@ -1758,6 +1879,7 @@ export default function App() {
         onDeleteSession={handleDeleteSession}
         customers={customers}
         photos={photos}
+        initialIsCreating={isSessionModalCreateMode}
       />
 
       <SearchCustomerModal
