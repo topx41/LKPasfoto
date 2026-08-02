@@ -523,11 +523,10 @@ User Agent: \` + navigator.userAgent;
         });
       }
 
-      // Render standalone zero-JS HTML page directly for Node 1 isolation test
-      // This prevents React or complex JS scripts from crashing or auto-closing the WebView
-      const thankYouHtml = renderStandaloneThankYouHtml(sharedPayload, debugEntry);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(200).send(thankYouHtml);
+      // Return HTTP 303 See Other redirect to /thank-you?tempId=${tempId}
+      // W3C Web Share Target API Spec requires 303 See Other redirect for POST requests.
+      // This converts POST to GET page navigation, PREVENTING Android WebAPK / Share Intent Activity from auto-closing!
+      return res.redirect(303, `/thank-you?tempId=${tempId}`);
     } catch (err: any) {
       console.error("Share target processing error:", err);
       debugEntry.status = 'ERROR';
@@ -539,6 +538,23 @@ User Agent: \` + navigator.userAgent;
       return res.status(500).send(errorHtml);
     }
   };
+
+  // Dedicated GET /thank-you endpoint for Node 1 Isolated Thank You Page
+  app.get("/thank-you", (req: express.Request, res: express.Response) => {
+    const tempId = (req.query.tempId || req.cookies?.foto_studio_pending_import_id || '') as string;
+    const payload = getTempImport(tempId) || {
+      fileName: 'Excel_Share_WhatsApp.xlsx',
+      tempId: tempId || 'unknown',
+      timestamp: Date.now(),
+      isWarningEmpty: false
+    };
+    const debugLogs = getShareDebugLogs();
+    const debugEntry = debugLogs.find(l => l.id === tempId) || debugLogs[0] || null;
+
+    const thankYouHtml = renderStandaloneThankYouHtml(payload, debugEntry);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(thankYouHtml);
+  });
 
   app.get("/share-target", async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const text = (req.query.text || req.query.title || req.query.url || "") as string;
@@ -568,9 +584,8 @@ User Agent: \` + navigator.userAgent;
       };
       saveTempImport(tempId, sharedPayload);
       const debugEntry = { id: tempId, path: '/share-target', contentType: 'text/query', files: [] };
-      const thankYouHtml = renderStandaloneThankYouHtml(sharedPayload, debugEntry);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(200).send(thankYouHtml);
+      addShareDebugLog(debugEntry);
+      return res.redirect(303, `/thank-you?tempId=${tempId}`);
     }
     next();
   });
