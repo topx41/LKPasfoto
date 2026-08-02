@@ -1707,6 +1707,15 @@ export default function App() {
           setIsShareDebugModalOpen(false);
           setIsPasteTextModalOpen(true);
         }}
+        onSimulateShareTarget={(rawSheetData, fileName) => {
+          setIsShareDebugModalOpen(false);
+          const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
+          setSharedRawSheetData(rawSheetData);
+          setSharedMappingConfig(autoConfig);
+          setSharedImportFileName(fileName || 'Simulasi_Share_WA.txt');
+          setIsImportOpen(true);
+          showToast(`⚡ Simulasi Share Intent Berhasil! Data diterima.`);
+        }}
       />
 
       <PasteTextModal

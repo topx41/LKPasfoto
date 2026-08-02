@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, AlertTriangle, CheckCircle2, Info, RefreshCw, Copy, Check, 
-  Upload, FileText, Smartphone, Server, HelpCircle, ShieldAlert
+  Upload, FileText, Smartphone, Server, HelpCircle, ShieldAlert, Zap, Play
 } from 'lucide-react';
 
 interface ShareDebugModalProps {
@@ -10,6 +10,7 @@ interface ShareDebugModalProps {
   initialDebugLog?: any;
   onOpenManualUpload?: () => void;
   onOpenPasteText?: () => void;
+  onSimulateShareTarget?: (rawSheetData: any, fileName: string) => void;
 }
 
 export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
@@ -18,9 +19,11 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
   initialDebugLog,
   onOpenManualUpload,
   onOpenPasteText,
+  onSimulateShareTarget,
 }) => {
   const [serverLog, setServerLog] = useState<any>(initialDebugLog || null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [simulating, setSimulating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [pwaStatus, setPwaStatus] = useState({
     swRegistered: false,
@@ -42,6 +45,40 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
       console.error('Failed to fetch share debug log:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSimulateShare = async () => {
+    setSimulating(true);
+    try {
+      const formData = new FormData();
+      formData.append('title', 'Daftar Customer Simulasi WA');
+      formData.append('text', "1. Budi Santoso - VIP\n2. Siti Aminah - Regular\n3. Ahmad Fauzi - VVIP\n4. Dewi Lestari - Regular");
+      
+      const res = await fetch('/api/share-target', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.rawSheetData && onSimulateShareTarget) {
+          onClose();
+          onSimulateShareTarget(data.rawSheetData, data.fileName || 'Simulasi_Share_WA.txt');
+        } else {
+          fetchServerDebugLog();
+        }
+      } else {
+        alert('Simulasi gagal dikirim ke server.');
+      }
+    } catch (err) {
+      console.error('Simulation error:', err);
+      alert('Terjadi kesalahan saat uji simulasi.');
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -278,32 +315,43 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
               </li>
             </ul>
 
-            <div className="pt-2 border-t border-slate-700/50 flex flex-wrap gap-2">
-              {onOpenManualUpload && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenManualUpload();
-                  }}
-                  className="flex-1 min-w-[180px] px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-600/20 transition-all"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Manual File Excel
-                </button>
-              )}
+            <div className="pt-2 border-t border-slate-700/50 space-y-2">
+              <button
+                onClick={handleSimulateShare}
+                disabled={simulating}
+                className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Zap className={`w-4 h-4 text-yellow-300 ${simulating ? 'animate-bounce' : ''}`} />
+                <span>{simulating ? 'Mengirim Simulasi Share Intent...' : '⚡ Uji / Simulasi Share Intent Sekarang (Tes Sistem)'}</span>
+              </button>
 
-              {onOpenPasteText && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenPasteText();
-                  }}
-                  className="flex-1 min-w-[180px] px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all"
-                >
-                  <FileText className="w-4 h-4 text-emerald-400" />
-                  Paste Teks Customer
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {onOpenManualUpload && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenManualUpload();
+                    }}
+                    className="flex-1 min-w-[180px] px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-600/20 transition-all cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Manual File Excel
+                  </button>
+                )}
+
+                {onOpenPasteText && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenPasteText();
+                    }}
+                    className="flex-1 min-w-[180px] px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    Paste Teks Customer
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
