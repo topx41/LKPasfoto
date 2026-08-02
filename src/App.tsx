@@ -20,6 +20,7 @@ import {
   Sliders,
   Bug,
   Smartphone,
+  LogOut,
 } from 'lucide-react';
 
 import { App as CapacitorApp } from '@capacitor/app';
@@ -96,9 +97,29 @@ export default function App() {
   const [isThankYouModalOpen, setIsThankYouModalOpen] = useState(false);
   const [thankYouFileName, setThankYouFileName] = useState('');
   const [thankYouTime, setThankYouTime] = useState('');
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [shareDebugData, setShareDebugData] = useState<any>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Handle Exit Application
+  const handleExitApp = () => {
+    setIsExitModalOpen(false);
+    if (isCapacitorNative()) {
+      try {
+        CapacitorApp.exitApp();
+      } catch (e) {
+        console.error('Failed to exit Capacitor App', e);
+      }
+    } else {
+      try {
+        window.close();
+      } catch (e) {
+        console.error('Failed window.close', e);
+      }
+    }
+    showToast('Aplikasi ditutup. Sampai jumpa!');
+  };
 
   // Pending Shared Excel from WhatsApp / Share Target / Drag Drop
   const [sharedImportData, setSharedImportData] = useState<ImportedCustomer[] | null>(null);
@@ -1345,6 +1366,16 @@ export default function App() {
               <Share2 className="w-3.5 h-3.5" />
               <span className="hidden lg:inline">Export</span>
             </button>
+
+            {/* Keluar Aplikasi */}
+            <button
+              onClick={() => setIsExitModalOpen(true)}
+              className="px-2 py-1 sm:px-2.5 sm:py-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 hover:border-rose-500/50 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+              title="Keluar / Tutup Aplikasi"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
           </div>
         </div>
       </header>
@@ -1790,6 +1821,27 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* KELUAR APLIKASI SECTION */}
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <span className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                  <LogOut className="w-4 h-4 text-rose-400" />
+                  Keluar / Tutup Aplikasi Studio
+                </span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Tutup aplikasi Liankhay Capture secara aman. Seluruh sesi, customer, dan foto tersimpan otomatis di perangkat.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsExitModalOpen(true)}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-rose-600/20 flex items-center gap-2 transition-all cursor-pointer shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar Aplikasi</span>
+              </button>
+            </div>
           </div>
         )}
       </main>
@@ -1974,6 +2026,57 @@ export default function App() {
         onClose={() => setIsPasteTextModalOpen(false)}
         onImportParsedText={handleImportParsedText}
       />
+
+      {/* MODAL KELUAR APLIKASI */}
+      {isExitModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
+                  <LogOut className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-100 text-base">Keluar Aplikasi</h3>
+                  <p className="text-xs text-slate-400">Liankhay Capture Studio</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsExitModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-xs text-slate-300">
+              <p className="leading-relaxed">
+                Apakah Anda yakin ingin keluar dari aplikasi <strong>Liankhay Capture</strong>?
+              </p>
+              <p className="text-[11px] text-emerald-400 flex items-center gap-1.5 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                <span>Seluruh data sesi, customer, dan rekap foto tersimpan otomatis.</span>
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => setIsExitModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleExitApp}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Keluar &amp; Tutup</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global File Drag Overlay (Share Intent Catching Zone) */}
       {isDraggingFile && (
