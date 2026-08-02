@@ -1,0 +1,6 @@
+*.jar binary
+*.aar binary
+*.so binary
+*.png binary
+*.jpg binary
+*.keystore binary
