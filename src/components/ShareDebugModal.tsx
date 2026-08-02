@@ -251,14 +251,30 @@ export const ShareDebugModal: React.FC<ShareDebugModalProps> = ({
           <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/40 space-y-3">
             <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
               <HelpCircle className="w-4 h-4 text-sky-400" />
-              Mengapa Android Share Sheet Kadang Kirim File Kosong?
+              Mengapa Log Server Menunjukkan "Belum Ada Log"?
             </h4>
+            
+            {!pwaStatus.isPwaStandalone && (
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
+                <div className="font-semibold flex items-center gap-1.5 text-amber-300">
+                  <Smartphone className="w-4 h-4 text-amber-400" />
+                  Mode Browser: Standard Web (Belum Di-Install sebagai PWA)
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  Android Share Sheet <strong>hanya dapat mendeteksi dan mengirim file ke aplikasi web</strong> jika aplikasi ini sudah <strong>di-Install ke Home Screen Android</strong> sebagai PWA.
+                </p>
+                <div className="pt-1 text-[11px] text-amber-300 font-medium">
+                  👉 Cara Install: Buka Chrome di HP → Klik menu titik tiga (⋮) → Pilih <strong>"Instal aplikasi"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.
+                </div>
+              </div>
+            )}
+
             <ul className="text-xs text-slate-300 space-y-2 list-disc list-inside leading-relaxed">
               <li>
-                Beberapa HP Android (seperti MIUI Xiaomi, Samsung OneUI, Realme, ColorOS) mengamankan file intent dari WhatsApp/File Manager dengan <code className="text-amber-300 bg-slate-800 px-1 rounded">content:// URI</code> sementara yang membutuhkan izin baca sistem.
+                <strong>Mode PWA/WebAPK Installed:</strong> Saat file di-share dari WhatsApp, Android akan mengarahkan request ke <code className="text-sky-300 bg-slate-800 px-1 rounded">/share-target</code> di server dan log request akan langsung tercatat.
               </li>
               <li>
-                Bila Chrome WebAPK tidak memiliki izin akses storage langsung, Android hanya memicu pembukaan aplikasi PWA tanpa mengunggah isi file.
+                <strong>Restriksi Sistem Android ROM (MIUI / Samsung / Realme):</strong> Jika file di-share via Android Share Sheet namun permission file dibatasi oleh ROM, Android hanya akan membuka layar aplikasi tanpa mengirimkan isi attachment file.
               </li>
             </ul>
 
