@@ -23,7 +23,7 @@ import {
 
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { Filesystem } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { isCapacitorNative } from './utils/nativeShareHelper';
 import { Customer, PhotoRecord, StudioSettings, StudioSession } from './types';
 import {
@@ -175,10 +175,32 @@ export default function App() {
 
     const checkPendingSharedImport = async () => {
       try {
-        // 0. Check Capacitor Local Database / Storage direct bridge
-        const capWindowData = (window as any).__CAPACITOR_SHARED_DATA__;
-        const capStorageData = localStorage.getItem('capacitor_shared_data') || localStorage.getItem('capacitor_shared_import');
-        const capPayload = capWindowData || (capStorageData ? JSON.parse(capStorageData) : null);
+        // 0a. Check Android Native Cache via Capacitor Filesystem
+        let capPayload: any = null;
+        try {
+          const cacheRes = await Filesystem.readFile({
+            path: 'shared_sheet_data.json',
+            directory: Directory.Cache,
+            encoding: Encoding.UTF8,
+          });
+          if (cacheRes && cacheRes.data) {
+            capPayload = typeof cacheRes.data === 'string' ? JSON.parse(cacheRes.data) : cacheRes.data;
+            // Delete cache file after reading so it isn't reprocessed
+            await Filesystem.deleteFile({
+              path: 'shared_sheet_data.json',
+              directory: Directory.Cache,
+            }).catch((err) => console.warn('Cache file delete warning:', err));
+          }
+        } catch (e) {
+          // Cache file does not exist or not natively shared yet
+        }
+
+        // 0b. Fallback to Window / Local Storage bridge if Filesystem cache wasn't found
+        if (!capPayload) {
+          const capWindowData = (window as any).__CAPACITOR_SHARED_DATA__;
+          const capStorageData = localStorage.getItem('capacitor_shared_data') || localStorage.getItem('capacitor_shared_import');
+          capPayload = capWindowData || (capStorageData ? JSON.parse(capStorageData) : null);
+        }
 
         if (capPayload) {
           try {

@@ -1,15 +1,29 @@
 package com.liankhay.capture;
 
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.util.Log;
+
 import com.getcapacitor.BridgeActivity;
+
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends BridgeActivity {
+
+    private static final String TAG = "LiankhayCapture";
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -24,100 +38,119 @@ public class MainActivity extends BridgeActivity {
         handleSendIntent(intent);
     }
 
-    private void handleSendIntent(Intent intent) {
+    private void handleSendIntent(final Intent intent) {
         if (intent == null) return;
-        String action = intent.getAction();
-        String type = intent.getType();
 
-        if ((Intent.ACTION_SEND.equals(action) || Intent.ACTION_SEND_MULTIPLE.equals(action)) && type != null) {
-            Uri uri = null;
-            if (intent.hasExtra(Intent.EXTRA_STREAM)) {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
                 try {
-                    uri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
-                } catch (Exception e) {
-                    Log.e("LiankhayCapture", "Error getting EXTRA_STREAM", e);
-                }
-            }
-            if (uri == null && intent.getClipData() != null && intent.getClipData().getItemCount() > 0) {
-                uri = intent.getClipData().getItemAt(0).getUri();
-            }
-            if (uri != null) {
-                processAndSaveSharedFile(uri);
-            }
-        }
-    }
+                    String action = intent.getAction();
+                    String type = intent.getType();
 
-    private void processAndSaveSharedFile(Uri uri) {
-        try {
-            Log.d("LiankhayCapture", "Processing shared content URI: " + uri.toString());
-            InputStream inputStream = getContentResolver().openInputStream(uri);
-            if (inputStream != null) {
-                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                byte[] data = new byte[16384];
-                int nRead;
-                while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
-                    buffer.write(data, 0, nRead);
-                }
-                buffer.flush();
-                byte[] bytes = buffer.toByteArray();
-                inputStream.close();
+                    if (action != null && (Intent.ACTION_SEND.equals(action) || Intent.ACTION_SEND_MULTIPLE.equals(action))) {
+                        Uri uri = null;
 
-                String base64Content = Base64.encodeToString(bytes, Base64.NO_WRAP);
-                String fileName = getFileNameFromUri(uri);
-
-                final String jsToRun = String.format(
-                    "try { " +
-                    "  var payload = { fileName: '%s', base64: '%s' }; " +
-                    "  localStorage.setItem('capacitor_shared_data', JSON.stringify(payload)); " +
-                    "  window.__CAPACITOR_SHARED_DATA__ = payload; " +
-                    "  window.dispatchEvent(new CustomEvent('capacitor_share_received', { detail: payload })); " +
-                    "} catch(e) { console.error('Error saving shared data in JS:', e); }",
-                    escapeJsString(fileName),
-                    base64Content
-                );
-
-                if (bridge != null && bridge.getWebView() != null) {
-                    bridge.getWebView().post(new Runnable() {
-                        @Override
-                        public void run() {
+                        if (intent.hasExtra(Intent.EXTRA_STREAM)) {
                             try {
-                                bridge.getWebView().evaluateJavascript(jsToRun, null);
-                            } catch (Exception e) {
-                                Log.e("LiankhayCapture", "Error evaluating JS in WebView", e);
+                                Object extra = intent.getExtras().get(Intent.EXTRA_STREAM);
+                                if (extra instanceof Uri) {
+                                    uri = (Uri) extra;
+                                }
+                            } catch (Throwable t) {
+                                Log.e(TAG, "Error reading EXTRA_STREAM", t);
                             }
                         }
-                    });
+
+                        if (uri == null && intent.getClipData() != null && intent.getClipData().getItemCount() > 0) {
+                            try {
+                                uri = intent.getClipData().getItemAt(0).getUri();
+                            } catch (Throwable t) {
+                                Log.e(TAG, "Error reading ClipData URI", t);
+                            }
+                        }
+
+                        if (uri != null) {
+                            saveSharedFileToCache(uri);
+                        }
+                    }
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error in handleSendIntent", t);
                 }
             }
-        } catch (Exception e) {
-            Log.e("LiankhayCapture", "Error reading shared content URI", e);
+        });
+    }
+
+    private void saveSharedFileToCache(Uri uri) {
+        try {
+            Log.d(TAG, "Processing shared content URI: " + uri.toString());
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            if (inputStream == null) return;
+
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] data = new byte[16384];
+            int nRead;
+            while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, nRead);
+            }
+            buffer.flush();
+            byte[] bytes = buffer.toByteArray();
+            inputStream.close();
+
+            String base64Content = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            String fileName = getFileNameFromUri(uri);
+
+            JSONObject jsonPayload = new JSONObject();
+            jsonPayload.put("fileName", fileName);
+            jsonPayload.put("base64", base64Content);
+            jsonPayload.put("timestamp", System.currentTimeMillis());
+
+            File cacheFile = new File(getCacheDir(), "shared_sheet_data.json");
+            FileOutputStream fos = new FileOutputStream(cacheFile);
+            fos.write(jsonPayload.toString().getBytes(StandardCharsets.UTF_8));
+            fos.flush();
+            fos.close();
+
+            Log.d(TAG, "Successfully wrote shared file JSON to cache: " + cacheFile.getAbsolutePath());
+
+            // Notify WebView using a lightweight JS event
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (bridge != null && bridge.getWebView() != null) {
+                            bridge.getWebView().evaluateJavascript(
+                                "(function(){ window.dispatchEvent(new CustomEvent('capacitor_share_received')); })();",
+                                null
+                            );
+                        }
+                    } catch (Throwable t) {
+                        Log.e(TAG, "Error dispatching JS event", t);
+                    }
+                }
+            });
+
+        } catch (Throwable t) {
+            Log.e(TAG, "Error saving shared file to cache", t);
         }
     }
 
     private String getFileNameFromUri(Uri uri) {
         String fileName = "Shared_Excel_File.xlsx";
         try {
-            android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+            Cursor cursor = getContentResolver().query(uri, null, null, null, null);
             if (cursor != null) {
-                int nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
                 if (nameIndex != -1 && cursor.moveToFirst()) {
                     fileName = cursor.getString(nameIndex);
                 }
                 cursor.close();
             }
-        } catch (Exception e) {
-            Log.e("LiankhayCapture", "Error getting file name", e);
+        } catch (Throwable t) {
+            Log.e(TAG, "Error getting file name from URI", t);
         }
         return fileName;
     }
-
-    private String escapeJsString(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
-    }
 }
+
 
