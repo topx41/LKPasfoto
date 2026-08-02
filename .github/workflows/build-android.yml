@@ -36,8 +36,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
+      - name: Setup Gradle Cache & Environment
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Sync Capacitor Android Project
         run: |
@@ -49,14 +51,12 @@ jobs:
           echo "Melakukan sync web assets ke project Android..."
           npx cap sync android
 
-      - name: Ensure Valid Gradle Wrapper
+      - name: Ensure Valid Gradle Wrapper JAR
         run: |
           cd android
           if ! java -jar gradle/wrapper/gradle-wrapper.jar --version >/dev/null 2>&1; then
-            echo "⚠️ gradle-wrapper.jar corrupt/invalid! Regenerating using system Gradle..."
-            gradle wrapper --gradle-version 8.14.3
-          else
-            echo "✅ gradle-wrapper.jar valid."
+            echo "⚠️ gradle-wrapper.jar corrupt! Downloading clean binary gradle-wrapper.jar..."
+            curl -sSL -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar || true
           fi
 
       - name: Build Debug APK with Gradle
