@@ -65,6 +65,7 @@ import { SessionModal } from './components/SessionModal';
 import { ExportShareModal } from './components/ExportShareModal';
 import { ShareDebugModal } from './components/ShareDebugModal';
 import { PasteTextModal } from './components/PasteTextModal';
+import { ShareThankYouModal } from './components/ShareThankYouModal';
 
 export type MainTabType = 'HOME' | 'CUSTOMER' | 'SESI' | 'REKAP' | 'SETTING';
 
@@ -86,6 +87,9 @@ export default function App() {
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isShareDebugModalOpen, setIsShareDebugModalOpen] = useState(false);
   const [isPasteTextModalOpen, setIsPasteTextModalOpen] = useState(false);
+  const [isThankYouModalOpen, setIsThankYouModalOpen] = useState(false);
+  const [thankYouFileName, setThankYouFileName] = useState('');
+  const [thankYouTime, setThankYouTime] = useState('');
   const [shareDebugData, setShareDebugData] = useState<any>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -146,15 +150,19 @@ export default function App() {
           setSharedRawSheetData(extracted.rawSheetData);
           setSharedMappingConfig(extracted.mappingConfig);
           setSharedImportFileName(file.name);
-          setIsImportOpen(true);
-          showToast('⚡ File Excel dari Share Android diterima! Siap dipreview & diimpor.');
+          setThankYouFileName(file.name);
+          setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+          setIsThankYouModalOpen(true);
+          showToast('⚡ Terima Kasih! File Excel dari Share Android diterima di Node 1.');
         } else {
           const customers = await parseCustomerExcel(file);
           if (customers.length > 0) {
             setSharedImportData(customers);
             setSharedImportFileName(file.name);
-            setIsImportOpen(true);
-            showToast(`⚡ File Excel dari Share Android diterima (${customers.length} customer)!`);
+            setThankYouFileName(file.name);
+            setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+            setIsThankYouModalOpen(true);
+            showToast(`⚡ Terima Kasih! File Excel dari Share Android diterima (${customers.length} customer).`);
           } else {
             showToast('⚠️ File dari Share Sheet tidak memiliki data customer.');
           }
@@ -182,15 +190,21 @@ export default function App() {
               const autoConfig = autoDetectColumnMapping(capPayload.rawSheetData.rawRows, capPayload.rawSheetData.maxCols);
               setSharedRawSheetData(capPayload.rawSheetData);
               setSharedMappingConfig(autoConfig);
-              setSharedImportFileName(capPayload.fileName || 'Capacitor_Share_Sheet.xlsx');
-              setIsImportOpen(true);
-              showToast(`⚡ Data dari Capacitor Native Local Storage (${capPayload.fileName || 'Share Sheet'}) berhasil diterima!`);
+              const fn = capPayload.fileName || 'Capacitor_Share_Sheet.xlsx';
+              setSharedImportFileName(fn);
+              setThankYouFileName(fn);
+              setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+              setIsThankYouModalOpen(true);
+              showToast(`⚡ Terima Kasih! Data dari Capacitor Native Local Storage (${fn}) diterima di Node 1.`);
               return;
             } else if (Array.isArray(capPayload.customers) && capPayload.customers.length > 0) {
               setSharedImportData(capPayload.customers);
-              setSharedImportFileName(capPayload.fileName || 'Capacitor_Share_Sheet.xlsx');
-              setIsImportOpen(true);
-              showToast(`⚡ Data (${capPayload.customers.length} customer) dari Capacitor Local Storage diterima!`);
+              const fn = capPayload.fileName || 'Capacitor_Share_Sheet.xlsx';
+              setSharedImportFileName(fn);
+              setThankYouFileName(fn);
+              setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+              setIsThankYouModalOpen(true);
+              showToast(`⚡ Terima Kasih! Data (${capPayload.customers.length} customer) dari Capacitor Local Storage diterima.`);
               return;
             }
           } catch (capErr) {
@@ -218,8 +232,10 @@ export default function App() {
                 setSharedRawSheetData(extracted.rawSheetData);
                 setSharedMappingConfig(extracted.mappingConfig);
                 setSharedImportFileName(fileName);
-                setIsImportOpen(true);
-                showToast(`⚡ File Excel (${fileName}) dari Share Sheet berhasil diterima! Siap dipreview & diimpor.`);
+                setThankYouFileName(fileName);
+                setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+                setIsThankYouModalOpen(true);
+                showToast(`⚡ Terima Kasih! File Excel (${fileName}) dari Share Sheet diterima di Node 1.`);
                 window.history.replaceState({}, document.title, window.location.pathname);
                 return;
               } else {
@@ -227,8 +243,10 @@ export default function App() {
                 if (customers.length > 0) {
                   setSharedImportData(customers);
                   setSharedImportFileName(fileName);
-                  setIsImportOpen(true);
-                  showToast(`⚡ File Excel (${fileName}) berhasil diterima (${customers.length} customer)!`);
+                  setThankYouFileName(fileName);
+                  setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+                  setIsThankYouModalOpen(true);
+                  showToast(`⚡ Terima Kasih! File Excel (${fileName}) berhasil diterima (${customers.length} customer).`);
                   window.history.replaceState({}, document.title, window.location.pathname);
                   return;
                 }
@@ -267,8 +285,10 @@ export default function App() {
                 setSharedRawSheetData(rawSheetData);
                 setSharedMappingConfig(autoConfig);
                 setSharedImportFileName('Teks_Share_WA.txt');
-                setIsImportOpen(true);
-                showToast('⚡ Teks daftar customer dari Share Sheet diterima! Siap dipreview & diimpor.');
+                setThankYouFileName('Teks_Share_WA.txt');
+                setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+                setIsThankYouModalOpen(true);
+                showToast('⚡ Terima Kasih! Teks daftar customer dari Share Sheet diterima di Node 1.');
                 window.history.replaceState({}, document.title, window.location.pathname);
                 return;
               }
@@ -302,12 +322,15 @@ export default function App() {
               const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
               setSharedRawSheetData(sheetData);
               setSharedMappingConfig(autoConfig);
-              setSharedImportFileName(initialSharedData.fileName || 'Excel_Share_Sheet.xlsx');
+              const fn = initialSharedData.fileName || 'Excel_Share_Sheet.xlsx';
+              setSharedImportFileName(fn);
+              setThankYouFileName(fn);
+              setThankYouTime(new Date().toLocaleTimeString('id-ID'));
               if (Array.isArray(initialSharedData.customers) && initialSharedData.customers.length > 0) {
                 setSharedImportData(initialSharedData.customers);
               }
-              setIsImportOpen(true);
-              showToast(`⚡ Data Excel (${initialSharedData.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+              setIsThankYouModalOpen(true);
+              showToast(`⚡ Terima Kasih! Data Excel (${fn}) berhasil diterima di Node 1.`);
             }
             window.history.replaceState({}, document.title, window.location.pathname);
             return;
@@ -359,12 +382,15 @@ export default function App() {
                   const autoConfig = autoDetectColumnMapping(sheetData.rawRows, sheetData.maxCols);
                   setSharedRawSheetData(sheetData);
                   setSharedMappingConfig(autoConfig);
-                  setSharedImportFileName(data.fileName || 'Excel_Share_Sheet.xlsx');
+                  const fn = data.fileName || 'Excel_Share_Sheet.xlsx';
+                  setSharedImportFileName(fn);
+                  setThankYouFileName(fn);
+                  setThankYouTime(new Date().toLocaleTimeString('id-ID'));
                   if (Array.isArray(data.customers) && data.customers.length > 0) {
                     setSharedImportData(data.customers);
                   }
-                  setIsImportOpen(true);
-                  showToast(`⚡ Data Excel (${data.fileName || 'Share Sheet'}) berhasil diterima! Siap dipreview & diimpor.`);
+                  setIsThankYouModalOpen(true);
+                  showToast(`⚡ Terima Kasih! Data Excel (${fn}) berhasil diterima di Node 1.`);
                 }
                 window.history.replaceState({}, document.title, window.location.pathname);
                 return;
@@ -1749,10 +1775,22 @@ export default function App() {
           const autoConfig = autoDetectColumnMapping(rawSheetData.rawRows, rawSheetData.maxCols);
           setSharedRawSheetData(rawSheetData);
           setSharedMappingConfig(autoConfig);
-          setSharedImportFileName(fileName || 'Simulasi_Share_WA.txt');
-          setIsImportOpen(true);
-          showToast(`⚡ Simulasi Share Intent Berhasil! Data diterima.`);
+          const fn = fileName || 'Simulasi_Share_WA.txt';
+          setSharedImportFileName(fn);
+          setThankYouFileName(fn);
+          setThankYouTime(new Date().toLocaleTimeString('id-ID'));
+          setIsThankYouModalOpen(true);
+          showToast(`⚡ Terima Kasih! Simulasi Share Intent Diterima di Node 1.`);
         }}
+      />
+
+      <ShareThankYouModal
+        isOpen={isThankYouModalOpen}
+        onClose={() => setIsThankYouModalOpen(false)}
+        fileName={thankYouFileName}
+        receivedTime={thankYouTime}
+        onProceedToMapping={() => setIsImportOpen(true)}
+        onOpenDebugLogs={() => setIsShareDebugModalOpen(true)}
       />
 
       <PasteTextModal
