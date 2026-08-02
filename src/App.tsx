@@ -1237,13 +1237,12 @@ export default function App() {
           {/* Logo & App Title */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="relative group shrink-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-400 via-blue-500 to-indigo-600 p-0.5 shadow-lg shadow-sky-500/25">
-                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-sky-500/20 to-blue-400/20" />
-                  <Aperture className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400 relative z-10 transition-transform group-hover:rotate-45" />
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                </div>
-              </div>
+              <img
+                src="/icon-192.png"
+                alt="Liankhay Logo"
+                referrerPolicy="no-referrer"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl shadow-lg shadow-sky-500/20 object-cover border border-sky-500/30 group-hover:scale-105 transition-transform"
+              />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

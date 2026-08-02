@@ -7,7 +7,10 @@ const svgBuffer = fs.readFileSync(path.join(__dirname, 'public/icon.svg'));
 const webSizes = [
   { name: 'public/icon-192.png', size: 192 },
   { name: 'public/icon-512.png', size: 512 },
-  { name: 'public/icon.png', size: 512 }
+  { name: 'public/icon.png', size: 512 },
+  { name: 'dist/icon-192.png', size: 192 },
+  { name: 'dist/icon-512.png', size: 512 },
+  { name: 'dist/icon.png', size: 512 }
 ];
 
 const androidMipmaps = [
@@ -19,12 +22,17 @@ const androidMipmaps = [
 ];
 
 async function generate() {
-  console.log('Generating web icons...');
+  console.log('Generating web & dist icons...');
   for (const item of webSizes) {
+    const targetPath = path.join(__dirname, item.name);
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
     await sharp(svgBuffer)
       .resize(item.size, item.size)
-      .png()
-      .toFile(path.join(__dirname, item.name));
+      .png({ compressionLevel: 6, adaptiveFiltering: true })
+      .toFile(targetPath);
     console.log(`Generated ${item.name}`);
   }
 
@@ -38,19 +46,19 @@ async function generate() {
     // ic_launcher.png
     await sharp(svgBuffer)
       .resize(m.iconSize, m.iconSize)
-      .png()
+      .png({ compressionLevel: 6, adaptiveFiltering: true })
       .toFile(path.join(targetDir, 'ic_launcher.png'));
 
     // ic_launcher_round.png
     await sharp(svgBuffer)
       .resize(m.iconSize, m.iconSize)
-      .png()
+      .png({ compressionLevel: 6, adaptiveFiltering: true })
       .toFile(path.join(targetDir, 'ic_launcher_round.png'));
 
     // ic_launcher_foreground.png
     await sharp(svgBuffer)
       .resize(m.foregroundSize, m.foregroundSize)
-      .png()
+      .png({ compressionLevel: 6, adaptiveFiltering: true })
       .toFile(path.join(targetDir, 'ic_launcher_foreground.png'));
 
     console.log(`Generated icons in ${m.dir}`);
