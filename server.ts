@@ -128,6 +128,169 @@ async function startServer() {
     });
   });
 
+  function renderStandaloneThankYouHtml(payload: any, debugEntry: any) {
+    const fileName = payload.fileName || 'Excel_Share_Sheet.xlsx';
+    const receivedTime = new Date().toLocaleTimeString('id-ID');
+    const tempId = payload.tempId || '';
+    const isWarning = payload.isWarningEmpty;
+    const fileSize = debugEntry?.files?.[0]?.sizeBytes || 0;
+    const mimeType = debugEntry?.files?.[0]?.mimetype || debugEntry?.contentType || 'multipart/form-data';
+
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terima Kasih - Share Target Received</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
+  <div class="w-full max-w-md bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 shadow-2xl space-y-6 text-center">
+    
+    <!-- Hero Checkmark Icon -->
+    <div class="mx-auto w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/20">
+      <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+      </svg>
+    </div>
+
+    <!-- Title & Subtitle -->
+    <div class="space-y-1">
+      <h1 class="text-2xl font-extrabold text-white">Terima Kasih!</h1>
+      <p class="text-sm font-semibold text-emerald-400">File / Data Berhasil Diterima di Node 1</p>
+      <p class="text-xs text-slate-400 pt-0.5">Share Target Receiver & Express Server Handshake OK</p>
+    </div>
+
+    <!-- Status & File Info Box -->
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left space-y-2.5 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <span class="text-slate-400 font-medium">Status Node 1 (Receiver):</span>
+        <span class="px-2.5 py-0.5 rounded-full ${isWarning ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'} font-bold">
+          ${isWarning ? 'TERIMA (FORMAT TEKS)' : 'SUKSES (TERIMA EXCEL)'}
+        </span>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Nama File/Teks:</span>
+        <span class="font-mono text-slate-200 font-bold truncate max-w-[190px] text-right">${fileName}</span>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Ukuran File:</span>
+        <span class="font-mono text-slate-300">${fileSize ? fileSize.toLocaleString('id-ID') + ' bytes' : 'Stream Text'}</span>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Tipe Content:</span>
+        <span class="font-mono text-slate-300 truncate max-w-[180px]">${mimeType}</span>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Waktu Ditangkap:</span>
+        <span class="font-mono text-slate-300">${receivedTime}</span>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Log ID Server:</span>
+        <span class="font-mono text-sky-400">${debugEntry?.id || tempId}</span>
+      </div>
+    </div>
+
+    <!-- Testing Note -->
+    <div class="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-200 text-xs text-left leading-relaxed">
+      🔒 <strong>Mode Pengujian Isosiasi (Node 1):</strong> Halaman ini sengaja ditampilkan tanpa menjalankan pemrosesan otomatis/React heavy script agar aplikasi tidak auto-close atau blank. Ini membuktikan bahwa file dari Share Sheet berhasil ditangkap 100%!
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="space-y-2.5 pt-1">
+      <a href="/?shared_import_id=${tempId}" class="block w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all text-center">
+        ⚡ Lanjutkan ke Olah Pemetaan (Node 2) →
+      </a>
+
+      <button onclick="shareDiagnosticReport()" class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-slate-700 transition-all flex items-center justify-center gap-2">
+        <span>📤 Bagikan Detail Log Error / Tracing (WhatsApp)</span>
+      </button>
+
+      <a href="/" class="block text-xs text-slate-400 hover:text-white pt-1">
+        ← Buka Halaman Utama Aplikasi
+      </a>
+    </div>
+
+  </div>
+
+  <script>
+    function shareDiagnosticReport() {
+      const report = \`📋 FOTO STUDIO - SHARE TARGET RECEIVER REPORT (NODE 1)
+Waktu: ${receivedTime}
+Log ID: ${debugEntry?.id || tempId}
+File: ${fileName}
+Ukuran: ${fileSize} bytes
+Content-Type: ${mimeType}
+Status: ${debugEntry?.status || 'OK'}
+User Agent: \` + navigator.userAgent;
+
+      if (navigator.share) {
+        navigator.share({ title: 'Share Target Diagnostic Report', text: report }).catch(() => {});
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(report).then(() => {
+          alert('📋 Diagnostic Report disalin ke Clipboard! Anda dapat membagikannya ke WhatsApp.');
+        });
+      }
+    }
+  </script>
+</body>
+</html>`;
+  }
+
+  function renderStandaloneErrorHtml(errorMessage: string, debugEntry: any) {
+    const receivedTime = new Date().toLocaleTimeString('id-ID');
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error Share Target - Foto Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 font-sans">
+  <div class="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-6 text-center">
+    
+    <div class="mx-auto w-20 h-20 rounded-full bg-rose-500/10 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-500/20">
+      <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+      </svg>
+    </div>
+
+    <div class="space-y-1">
+      <h1 class="text-2xl font-extrabold text-white">Terjadi Error Share Intent</h1>
+      <p class="text-xs text-rose-300 font-medium">${errorMessage}</p>
+    </div>
+
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left space-y-2 text-xs">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Waktu:</span>
+        <span class="font-mono text-slate-300">${receivedTime}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Path:</span>
+        <span class="font-mono text-slate-300">${debugEntry?.path || '/share-target'}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Log ID:</span>
+        <span class="font-mono text-rose-400">${debugEntry?.id || '-'}</span>
+      </div>
+    </div>
+
+    <div class="space-y-2 pt-1">
+      <a href="/" class="block w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm border border-slate-700 transition-all text-center">
+        ← Buka Halaman Utama Aplikasi
+      </a>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
   async function renderAppHtmlWithPayload(req: express.Request, res: express.Response, payload: any) {
     try {
       let htmlPath = path.join(process.cwd(), "index.html");
@@ -360,22 +523,20 @@ async function startServer() {
         });
       }
 
-      // Directly render 200 OK HTML with inlined window.__INITIAL_SHARED_DATA__
-      // This eliminates 303 Redirects which cause blank screen crashes on Android Chrome WebAPK Share Target
-      return renderAppHtmlWithPayload(req, res, sharedPayload);
+      // Render standalone zero-JS HTML page directly for Node 1 isolation test
+      // This prevents React or complex JS scripts from crashing or auto-closing the WebView
+      const thankYouHtml = renderStandaloneThankYouHtml(sharedPayload, debugEntry);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(thankYouHtml);
     } catch (err: any) {
       console.error("Share target processing error:", err);
       debugEntry.status = 'ERROR';
       debugEntry.details = `Error server: ${err?.message || err}`;
       addShareDebugLog(debugEntry);
 
-      const errorPayload = {
-        isError: true,
-        errorMessage: err?.message || 'Server error',
-        debugLog: debugEntry,
-        timestamp: Date.now(),
-      };
-      return renderAppHtmlWithPayload(req, res, errorPayload);
+      const errorHtml = renderStandaloneErrorHtml(err?.message || 'Server error', debugEntry);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(500).send(errorHtml);
     }
   };
 
@@ -406,7 +567,10 @@ async function startServer() {
         timestamp: Date.now(),
       };
       saveTempImport(tempId, sharedPayload);
-      return renderAppHtmlWithPayload(req, res, sharedPayload);
+      const debugEntry = { id: tempId, path: '/share-target', contentType: 'text/query', files: [] };
+      const thankYouHtml = renderStandaloneThankYouHtml(sharedPayload, debugEntry);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(thankYouHtml);
     }
     next();
   });
