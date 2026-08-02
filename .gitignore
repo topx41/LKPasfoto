@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Android Build & Cache (keeps android source code tracked)
+android/app/build/
+android/.gradle/
+android/build/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json

@@ -1,120 +1,67 @@
-name: Build Android APK
+name: Build Android APK & AAB
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+      - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout source
-      - name: Checkout
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Setup Node.js (Node 22 required by Capacitor 7 CLI)
-      - name: Setup Node
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
 
-      # Install dependencies
-      - name: Install dependencies
+      - name: Install NPM Dependencies
         run: npm ci || npm install
 
-      # Build Web Assets (React / Vite)
-      - name: Build Web
+      - name: Build Web Application (React / Vite)
         run: npm run build
 
-      # Setup Java 21
-      - name: Setup Java
+      - name: Setup Java 21 JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # Verify Java Environment
-      - name: Verify Java
-        run: |
-          java -version
-          javac -version
-          echo "JAVA_HOME=$JAVA_HOME"
-
-      # Setup Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Add Android Platform if missing & Sync Capacitor
-      - name: Add Android Platform & Sync
+      - name: Sync Capacitor Android Project
         run: |
           if [ ! -d "android" ]; then
-            echo "Folder android belum ada, membuat platform android dengan Capacitor..."
+            echo "Folder android belum ada, menambahkan platform Android..."
             npx cap add android
           fi
 
-          # Inject Intent Filter into AndroidManifest.xml so app appears in Android Share Sheet
-          MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
-          if [ -f "$MANIFEST_FILE" ] && ! grep -q "android.intent.action.SEND" "$MANIFEST_FILE"; then
-            echo "Injecting Android Share Intent Filter into AndroidManifest.xml..."
-            cat << 'EOF' > inject_intent.cjs
-          const fs = require('fs');
-          const manifestPath = 'android/app/src/main/AndroidManifest.xml';
-          if (fs.existsSync(manifestPath)) {
-            let content = fs.readFileSync(manifestPath, 'utf-8');
-            if (!content.includes('android.intent.action.SEND')) {
-              const shareIntent = `
-                      <!-- Register app in Android System Share Sheet for Excel & CSV Files -->
-                      <intent-filter>
-                          <action android:name="android.intent.action.SEND" />
-                          <action android:name="android.intent.action.SEND_MULTIPLE" />
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-                          <data android:mimeType="application/vnd.ms-excel" />
-                          <data android:mimeType="text/csv" />
-                          <data android:mimeType="text/comma-separated-values" />
-                          <data android:mimeType="application/csv" />
-                          <data android:mimeType="application/excel" />
-                          <data android:mimeType="*/*" />
-                      </intent-filter>`;
-              content = content.replace('</activity>', shareIntent + '\n        </activity>');
-              fs.writeFileSync(manifestPath, content, 'utf-8');
-              console.log('Successfully injected Share Intent Filter!');
-            }
-          }
-          EOF
-            node inject_intent.cjs
-            rm -f inject_intent.cjs
-          fi
-
-          echo "Melakukan sync file web ke project Android..."
+          echo "Melakukan sync web assets ke project Android..."
           npx cap sync android
 
-      # Build Debug APK
-      - name: Build Debug APK
+      - name: Build Debug APK with Gradle
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # Show generated outputs
-      - name: Show Build Outputs
+      - name: Show Generated Build Artifacts
         run: |
-          echo "===== APK ====="
+          echo "===== Generated APK Files ====="
           find android/app/build/outputs/apk -type f || true
 
-          echo "===== AAB ====="
-          find android/app/build/outputs/bundle -type f || true
-
-      # Upload APK & AAB Artifact
-      - name: Upload APK
+      - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Android-APK
+          name: Liankhay-Capture-Android-APK
           path: |
             android/app/build/outputs/apk/**/*.apk
-            android/app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
+
