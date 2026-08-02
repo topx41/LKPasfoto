@@ -1334,18 +1334,6 @@ export default function App() {
 
           {/* QUICK ACTIONS */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* SESSION SELECTOR PILL */}
-            <button
-              onClick={handleOpenSessionListModal}
-              className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 rounded-lg text-[11px] sm:text-xs font-bold text-sky-300 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-              title="Klik untuk Kelola / Ganti Sesi Foto"
-            >
-              <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="truncate max-w-[80px] sm:max-w-[140px]">
-                {activeSession ? activeSession.name : 'Sesi Utama'}
-              </span>
-            </button>
-
             {/* Import Excel */}
             <button
               onClick={() => setIsImportOpen(true)}
@@ -1380,42 +1368,84 @@ export default function App() {
         </div>
       </header>
 
-      {/* ACTIVE CUSTOMER QUICK STRIP BAR */}
-      <section className="bg-slate-900/60 border-b border-slate-800 px-2 py-1.5 sm:px-4 sm:py-2">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 text-xs">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 font-semibold border border-sky-500/30 shrink-0 text-[10px] sm:text-xs">
-              Customer:
-            </span>
-            <span className="font-bold text-xs sm:text-sm text-slate-100 break-words leading-tight max-w-[180px] sm:max-w-sm">
-              {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
-            </span>
-            {activeCustomer?.category && (
-              <span className="hidden md:inline px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
-                {activeCustomer.category}
+      {/* ACTIVE SESSION & CUSTOMER QUICK STRIP BAR */}
+      <section className="bg-slate-900/90 border-b border-slate-800/90 px-2.5 py-2 sm:px-4 sm:py-2 backdrop-blur-md shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+          {/* Top Row on Mobile: Sesi on Left, Search + Next on Right */}
+          <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
+            {/* Aesthetic Active Session Pill */}
+            <button
+              onClick={handleOpenSessionListModal}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-sky-950/90 via-slate-900 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 hover:border-sky-400 text-sky-300 transition-all shadow-sm group cursor-pointer shrink-0 min-w-0"
+              title="Klik untuk Kelola / Ganti Sesi Foto"
+            >
+              <FolderKanban className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="text-[10px] text-sky-400/80 font-mono font-bold uppercase tracking-wider hidden xs:inline">SESI:</span>
+              <span className="font-extrabold text-slate-100 truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[200px] text-xs">
+                {activeSession ? activeSession.name : 'Sesi Utama'}
               </span>
-            )}
-            <span className="text-sky-400 font-mono text-[10px] sm:text-[11px]">
-              (📷 {activeCustomer ? activeCustomer.photoCount : 0})
-            </span>
+              <span className="px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-300 text-[10px] font-mono font-bold border border-sky-500/30 shrink-0">
+                #{formatFileNumber(activeSession?.currentNumber || settings.currentNumber, activeSession?.numberDigitCount || settings.digits)}
+              </span>
+            </button>
+
+            {/* Quick Actions (Mobile View) */}
+            <div className="flex items-center gap-1.5 shrink-0 sm:hidden">
+              <button
+                onClick={() => setIsSearchOpen(true)}
+                className="px-2.5 py-1 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-200 rounded-lg font-medium flex items-center gap-1 text-[11px] transition-colors cursor-pointer shadow-xs"
+              >
+                <Search className="w-3 h-3 text-sky-400" />
+                <span>Cari</span>
+              </button>
+
+              <button
+                onClick={handleNextCustomer}
+                className="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-lg shadow-sm flex items-center gap-1 text-[11px] transition-all cursor-pointer"
+              >
+                <span>Next</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setIsSearchOpen(true)}
-              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-1 text-[11px] transition-colors"
-            >
-              <Search className="w-3 h-3 text-sky-400" />
-              <span>Cari</span>
-            </button>
+          {/* Customer Info Row (Mobile: Row 2, Desktop: Inline) */}
+          <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 bg-slate-950/50 sm:bg-transparent p-1.5 sm:p-0 rounded-lg sm:rounded-none border border-slate-800/60 sm:border-none">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700 shrink-0 text-[10px] sm:text-xs">
+                Customer:
+              </span>
+              <span className="font-bold text-xs sm:text-sm text-slate-100 truncate max-w-[150px] xs:max-w-[200px] sm:max-w-[220px]">
+                {activeCustomer ? activeCustomer.name : 'Belum Dipilih'}
+              </span>
+              {activeCustomer?.category && (
+                <span className="hidden xs:inline px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 text-[10px] shrink-0 border border-slate-700/50">
+                  {activeCustomer.category}
+                </span>
+              )}
+              <span className="text-sky-400 font-mono font-semibold text-[10px] sm:text-[11px] shrink-0">
+                (📷 {activeCustomer ? activeCustomer.photoCount : 0})
+              </span>
+            </div>
 
-            <button
-              onClick={handleNextCustomer}
-              className="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-lg shadow flex items-center gap-1 text-[11px] transition-all"
-            >
-              <span>Next</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            {/* Quick Actions (Desktop View) */}
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0 ml-auto">
+              <button
+                onClick={() => setIsSearchOpen(true)}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-1 text-[11px] transition-colors cursor-pointer"
+              >
+                <Search className="w-3 h-3 text-sky-400" />
+                <span>Cari</span>
+              </button>
+
+              <button
+                onClick={handleNextCustomer}
+                className="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-lg shadow flex items-center gap-1 text-[11px] transition-all cursor-pointer"
+              >
+                <span>Next</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1912,9 +1942,9 @@ export default function App() {
       {/* FOOTER */}
       <footer className="border-t border-slate-800/80 py-4 px-4 bg-slate-900/40 text-xs text-slate-500 text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© Liankhay Capture Manager — Multi Sesi &amp; Auto Increment Foto Studio</p>
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>Affix Software</span>
+          <p>© Liankhay Photography</p>
+          <div className="flex items-center gap-2 text-slate-400 font-semibold text-xs">
+            <span className="text-sky-400 font-bold">Affix Soft</span>
           </div>
         </div>
       </footer>
