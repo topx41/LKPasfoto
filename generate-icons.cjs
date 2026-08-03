@@ -5,13 +5,24 @@ const path = require('path');
 const svgPath = path.join(__dirname, 'public/icon.svg');
 const svgBuffer = fs.readFileSync(svgPath);
 
+// Create transparent version for Android Adaptive Icon foreground with 58% scale (fits Android 66dp/108dp safe zone)
+let foregroundSvgStr = svgBuffer.toString('utf8');
+// Remove background card rects
+foregroundSvgStr = foregroundSvgStr.replace(/<rect width="512" height="512" rx="108" fill="url\(#bgGrad\)" \/>/, '');
+foregroundSvgStr = foregroundSvgStr.replace(/<rect width="508" height="508" x="2" y="2" rx="106" fill="none"[^>]*\/>/, '');
+// Change inner transform scale from 0.84 to 0.58 for safe adaptive margins
+foregroundSvgStr = foregroundSvgStr.replace(/scale\(0\.84\)/, 'scale(0.58)');
+const foregroundSvgBuffer = Buffer.from(foregroundSvgStr);
+
 const webSizes = [
   { name: 'public/icon-192.png', size: 192 },
   { name: 'public/icon-512.png', size: 512 },
   { name: 'public/icon.png', size: 512 },
+  { name: 'public/favicon.ico', size: 64 },
   { name: 'dist/icon-192.png', size: 192 },
   { name: 'dist/icon-512.png', size: 512 },
-  { name: 'dist/icon.png', size: 512 }
+  { name: 'dist/icon.png', size: 512 },
+  { name: 'dist/favicon.ico', size: 64 }
 ];
 
 const androidMipmaps = [
@@ -69,14 +80,22 @@ async function generate() {
       .png({ compressionLevel: 6, adaptiveFiltering: true })
       .toFile(path.join(targetDir, 'ic_launcher.png'));
 
-    // Round launcher icon (ic_launcher_round.png)
-    await sharp(svgBuffer)
+    // Round launcher icon (ic_launcher_round.png) with circular mask
+    const circleMask = Buffer.from(
+      `<svg width="${m.iconSize}" height="${m.iconSize}"><circle cx="${m.iconSize/2}" cy="${m.iconSize/2}" r="${m.iconSize/2}" fill="#fff"/></svg>`
+    );
+
+    const fullResized = await sharp(svgBuffer)
       .resize(m.iconSize, m.iconSize)
-      .png({ compressionLevel: 6, adaptiveFiltering: true })
+      .toBuffer();
+
+    await sharp(fullResized)
+      .composite([{ input: circleMask, blend: 'dest-in' }])
+      .png({ compressionLevel: 6 })
       .toFile(path.join(targetDir, 'ic_launcher_round.png'));
 
-    // Adaptive Foreground (ic_launcher_foreground.png)
-    await sharp(svgBuffer)
+    // Adaptive Foreground (ic_launcher_foreground.png) - Transparent background for clean Android adaptive masking
+    await sharp(foregroundSvgBuffer)
       .resize(m.foregroundSize, m.foregroundSize)
       .png({ compressionLevel: 6, adaptiveFiltering: true })
       .toFile(path.join(targetDir, 'ic_launcher_foreground.png'));
